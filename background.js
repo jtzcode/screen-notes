@@ -11,9 +11,6 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
-// Stash pending note data per tab so the content script can reference it
-const pendingNotes = {};
-
 // Handle context menu click — inject bubble into the page
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId !== "flomo-quick-note") return;
@@ -31,8 +28,10 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const pageUrl = tab.url || "";
   const pageTitle = tab.title || "";
 
-  // Store pending data keyed by tab id
-  pendingNotes[tab.id] = { selectedText, pageUrl, pageTitle };
+  // Store pending data in session storage (survives service worker restarts)
+  await chrome.storage.session.set({
+    ["pending_" + tab.id]: { selectedText, pageUrl, pageTitle }
+  });
 
   // Inject the content script into the active tab
   await chrome.scripting.executeScript({
@@ -52,16 +51,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type !== "qn-save") return;
 
   const tabId = sender.tab && sender.tab.id;
-  const pending = tabId && pendingNotes[tabId];
-
-  if (!pending) {
-    sendResponse({ success: false, message: "No pending note found." });
-    return;
-  }
 
   // Async work — must return true to keep the message channel open
   (async () => {
     try {
+      const sessionData = await chrome.storage.session.get("pending_" + tabId);
+      const pending = sessionData["pending_" + tabId];
+
+      if (!pending) {
+        sendResponse({ success: false, message: "No pending note found. Please try selecting the text again." });
+        return;
+      }
+
       const { provider: providerId, providerConfig } = await chrome.storage.sync.get(["provider", "providerConfig"]);
       const provider = getProvider(providerId || DEFAULT_PROVIDER);
 
@@ -84,7 +85,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (notes.length > MAX_NOTES) notes.length = MAX_NOTES;
       await chrome.storage.local.set({ notes });
 
-      delete pendingNotes[tabId];
+      // Clean up
+      await chrome.storage.session.remove("pending_" + tabId);
       sendResponse({ success: true, message: "Saved to " + provider.name + " ✓" });
     } catch (err) {
       sendResponse({ success: false, message: "Failed: " + err.message });

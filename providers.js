@@ -38,7 +38,7 @@ NoteProviders.flomo = {
 
   buildContent(selectedText, userNote, pageUrl) {
     const parts = [selectedText];
-    parts.push("---");
+    parts.push("——————————");
     if (userNote) parts.push(userNote);
     parts.push(pageUrl);
     parts.push("#Web-Reading");

@@ -23,7 +23,10 @@ chrome.storage.local.get("notes", ({ notes = [] }) => {
     const time = formatTime(note.timestamp);
 
     card.innerHTML = `
-      <div class="note-selected">"${escapeHtml(selectedText)}"</div>
+      <div class="note-card-header">
+        <div class="note-selected">"${escapeHtml(selectedText)}"</div>
+        <button class="btn-delete" title="Delete note">×</button>
+      </div>
       ${needsExpand ? `<button class="btn-show-more">Show more</button>` : ""}
       ${userNote ? `<div class="note-user">${escapeHtml(userNote)}</div>` : ""}
       <div class="note-meta">
@@ -32,6 +35,16 @@ chrome.storage.local.get("notes", ({ notes = [] }) => {
         <span class="note-time">${escapeHtml(time)}</span>
       </div>
     `;
+
+    card.querySelector(".btn-delete").addEventListener("click", async () => {
+      const { notes: current = [] } = await chrome.storage.local.get("notes");
+      const updated = current.filter(n => n.timestamp !== note.timestamp);
+      await chrome.storage.local.set({ notes: updated });
+      card.remove();
+      if (container.children.length === 0) {
+        container.innerHTML = '<p class="empty-state">No notes yet. Select text on a webpage, right-click, and choose "Take quick notes"!</p>';
+      }
+    });
 
     if (needsExpand) {
       const btn = card.querySelector(".btn-show-more");

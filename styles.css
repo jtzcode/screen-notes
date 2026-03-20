@@ -210,12 +210,34 @@ blockquote {
   box-shadow: 0 1px 4px rgba(0,0,0,0.08);
 }
 
+.note-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 6px;
+}
+
 .note-selected {
   font-style: italic;
   color: #555;
   font-size: 13px;
   margin-bottom: 4px;
   word-break: break-word;
+  flex: 1;
+}
+
+.btn-delete {
+  background: none;
+  border: none;
+  color: #ccc;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.btn-delete:hover {
+  color: #e53e3e;
 }
 
 .btn-show-more {
