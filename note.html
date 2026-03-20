@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Take Quick Note</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="note-page">
+  <h2>📝 Quick Note</h2>
+
+  <div id="selected-text-block">
+    <label>Selected text:</label>
+    <blockquote id="selected-text"></blockquote>
+  </div>
+
+  <div id="source-block">
+    <label>Source:</label>
+    <a id="page-url" href="#" target="_blank" rel="noopener noreferrer"></a>
+  </div>
+
+  <div class="form-group">
+    <label for="user-note">Your note:</label>
+    <textarea id="user-note" rows="5" placeholder="What are you thinking?"></textarea>
+  </div>
+
+  <div class="actions">
+    <button id="btn-cancel" class="btn btn-secondary">Cancel</button>
+    <button id="btn-save" class="btn btn-primary" disabled>Save</button>
+  </div>
+
+  <div id="status-msg" class="status-msg hidden"></div>
+
+  <script src="providers.js"></script>
+  <script src="note.js"></script>
+</body>
+</html>
