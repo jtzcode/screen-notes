@@ -2,6 +2,8 @@
 
 Highlight text on any webpage, jot down your thoughts, and save to your favorite note app — all without leaving the page.
 
+![Quick Note floating bubble](screenshots/intro.png)
+
 ## Features
 
 - **Context menu integration** — Select text, right-click → "Take quick notes"
@@ -10,10 +12,6 @@ Highlight text on any webpage, jot down your thoughts, and save to your favorite
 - **Notes history** — Click the extension icon to browse your latest 50 notes
 - **Provider abstraction** — Designed to support multiple note apps (only Flomo for now)
 - **Shadow DOM isolation** — The bubble UI won't interfere with any website's styles
-
-## Screenshot
-
-_Coming soon_
 
 ## Installation
 
