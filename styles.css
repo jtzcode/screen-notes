@@ -218,6 +218,19 @@ blockquote {
   word-break: break-word;
 }
 
+.btn-show-more {
+  background: none;
+  border: none;
+  color: #4f8ff7;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 4px;
+}
+.btn-show-more:hover {
+  text-decoration: underline;
+}
+
 .note-user {
   font-size: 13px;
   color: #333;

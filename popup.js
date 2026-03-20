@@ -17,11 +17,14 @@ chrome.storage.local.get("notes", ({ notes = [] }) => {
     card.className = "note-card";
 
     const selectedText = truncate(note.selectedText, 100);
+    const fullText = note.selectedText || "";
+    const needsExpand = fullText.length > 100;
     const userNote = note.userNote ? truncate(note.userNote, 80) : "";
     const time = formatTime(note.timestamp);
 
     card.innerHTML = `
       <div class="note-selected">"${escapeHtml(selectedText)}"</div>
+      ${needsExpand ? `<button class="btn-show-more">Show more</button>` : ""}
       ${userNote ? `<div class="note-user">${escapeHtml(userNote)}</div>` : ""}
       <div class="note-meta">
         <a class="note-url" href="${escapeHtml(note.pageUrl)}" target="_blank" rel="noopener noreferrer"
@@ -29,6 +32,18 @@ chrome.storage.local.get("notes", ({ notes = [] }) => {
         <span class="note-time">${escapeHtml(time)}</span>
       </div>
     `;
+
+    if (needsExpand) {
+      const btn = card.querySelector(".btn-show-more");
+      const textEl = card.querySelector(".note-selected");
+      let expanded = false;
+      btn.addEventListener("click", () => {
+        expanded = !expanded;
+        textEl.textContent = expanded ? `"${fullText}"` : `"${selectedText}"`;
+        btn.textContent = expanded ? "Show less" : "Show more";
+      });
+    }
+
     container.appendChild(card);
   }
 });
