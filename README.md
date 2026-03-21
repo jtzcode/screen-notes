@@ -12,6 +12,7 @@ Highlight text on any webpage, jot down your thoughts, and save to your favorite
 - **Notes history** — Click the extension icon to browse your latest 50 notes
 - **Provider abstraction** — Designed to support multiple note apps (only Flomo for now)
 - **Shadow DOM isolation** — The bubble UI won't interfere with any website's styles
+- **Fallback note window** — If inline injection is unavailable, the note flow opens in an extension window instead of failing silently
 
 ## Installation
 
@@ -50,13 +51,15 @@ Go to [Flomo](https://flomoapp.com) → Settings → API → copy the webhook UR
 
 ```
 ├── manifest.json      # Chrome extension manifest (V3)
-├── background.js      # Service worker: context menu, script injection, API calls
+├── background.js      # Service worker: context menu, injection, fallback orchestration
 ├── content.js         # Floating bubble UI (injected into pages)
-├── providers.js       # Note provider abstraction (Flomo, future providers)
+├── providers.js       # Provider registry and provider implementations
+├── storage.js         # Shared storage boundary for settings, history, and pending state
+├── note-service.js    # Shared note save workflow used by background and fallback UI
 ├── popup.html/js      # Extension icon popup: recent notes list
 ├── options.html/js    # Settings page: provider selection & config
-├── note.html/js       # Standalone note page (fallback)
-├── styles.css         # Shared styles for popup & options
+├── note.html/js       # Fallback note window when page injection is unavailable
+├── styles.css         # Shared styles for popup, options, and fallback window
 └── icons/             # Extension icons (16, 48, 128px)
 ```
 
@@ -77,7 +80,7 @@ NoteProviders.notion = {
 };
 ```
 
-The options page and save logic will pick it up automatically — no other files need changes.
+The options page and save logic will pick it up automatically. If the provider uses a different API host, update `host_permissions` in [manifest.json](manifest.json) as well.
 
 ## Permissions
 

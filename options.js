@@ -42,23 +42,12 @@ function renderConfigFields(providerId, savedConfig) {
   }
 }
 
-// ——— Load saved settings (with migration from old format) ———
-chrome.storage.sync.get(["provider", "providerConfig", "flomoWebhookUrl"], (data) => {
-  let providerId = data.provider || DEFAULT_PROVIDER;
-  let config = data.providerConfig || {};
-
-  // Migrate old flomoWebhookUrl → new format
-  if (!data.provider && data.flomoWebhookUrl) {
-    providerId = "flomo";
-    config = { webhookUrl: data.flomoWebhookUrl };
-    // Persist migrated data and clean up old key
-    chrome.storage.sync.set({ provider: providerId, providerConfig: config });
-    chrome.storage.sync.remove("flomoWebhookUrl");
-  }
-
+// ——— Load saved settings ———
+async function loadSettings() {
+  const { providerId, providerConfig } = await QuickNotesStorage.getSettings();
   providerSelect.value = providerId;
-  renderConfigFields(providerId, config);
-});
+  renderConfigFields(providerId, providerConfig);
+}
 
 // Re-render fields when provider changes
 providerSelect.addEventListener("change", () => {
@@ -66,7 +55,7 @@ providerSelect.addEventListener("change", () => {
 });
 
 // ——— Save ———
-document.getElementById("btn-save").addEventListener("click", () => {
+document.getElementById("btn-save").addEventListener("click", async () => {
   const providerId = providerSelect.value;
   const provider = getProvider(providerId);
   if (!provider) {
@@ -86,9 +75,8 @@ document.getElementById("btn-save").addEventListener("click", () => {
     return;
   }
 
-  chrome.storage.sync.set({ provider: providerId, providerConfig: config }, () => {
-    showStatus("Saved ✓", false);
-  });
+  await QuickNotesStorage.saveSettings(providerId, config);
+  showStatus("Saved ✓", false);
 });
 
 function showStatus(msg, isError) {
@@ -96,3 +84,7 @@ function showStatus(msg, isError) {
   el.textContent = msg;
   el.className = "status-msg " + (isError ? "error" : "success");
 }
+
+loadSettings().catch((err) => {
+  showStatus("Failed to load settings: " + err.message, true);
+});

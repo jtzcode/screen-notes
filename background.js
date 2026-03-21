@@ -1,49 +1,56 @@
-importScripts("providers.js");
+importScripts("providers.js", "storage.js", "note-service.js");
 
-const MAX_NOTES = 50;
+const QUICK_NOTE_MENU_ID = "quick-notes-take-note";
 
 // Register context menu item on install
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({
-    id: "flomo-quick-note",
-    title: "Take quick notes",
-    contexts: ["selection"]
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({
+      id: QUICK_NOTE_MENU_ID,
+      title: "Take quick notes",
+      contexts: ["selection"]
+    });
   });
 });
 
 // Handle context menu click — inject bubble into the page
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId !== "flomo-quick-note") return;
+  if (info.menuItemId !== QUICK_NOTE_MENU_ID || !tab || typeof tab.id !== "number") return;
 
-  // Check if provider is configured
-  const { provider, providerConfig } = await chrome.storage.sync.get(["provider", "providerConfig"]);
-  const p = getProvider(provider || DEFAULT_PROVIDER);
-
-  if (!p || !providerConfig || !p.validate(providerConfig).valid) {
+  let configuredProvider;
+  try {
+    configuredProvider = await QuickNotesNoteService.getConfiguredProvider();
+  } catch (err) {
     chrome.runtime.openOptionsPage();
     return;
   }
 
-  const selectedText = info.selectionText || "";
-  const pageUrl = tab.url || "";
-  const pageTitle = tab.title || "";
+  const pendingSelection = {
+    selectedText: info.selectionText || "",
+    pageUrl: tab.url || "",
+    pageTitle: tab.title || ""
+  };
 
-  // Store pending data in session storage (survives service worker restarts)
-  await chrome.storage.session.set({
-    ["pending_" + tab.id]: { selectedText, pageUrl, pageTitle }
-  });
+  await QuickNotesStorage.setPendingSelection(tab.id, pendingSelection);
 
-  // Inject the content script into the active tab
-  await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    files: ["content.js"]
-  });
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ["content.js"]
+    });
 
-  // Send the data to the injected script
-  chrome.tabs.sendMessage(tab.id, {
-    type: "qn-populate",
-    data: { selectedText, pageUrl, pageTitle, providerName: p.name }
-  });
+    await chrome.tabs.sendMessage(tab.id, {
+      type: "qn-populate",
+      data: {
+        selectedText: pendingSelection.selectedText,
+        pageUrl: pendingSelection.pageUrl,
+        pageTitle: pendingSelection.pageTitle,
+        providerName: configuredProvider.provider.name
+      }
+    });
+  } catch (err) {
+    await openFallbackNoteWindow(tab.id, pendingSelection);
+  }
 });
 
 // Handle save requests from the content script
@@ -55,39 +62,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // Async work — must return true to keep the message channel open
   (async () => {
     try {
-      const sessionData = await chrome.storage.session.get("pending_" + tabId);
-      const pending = sessionData["pending_" + tabId];
-
-      if (!pending) {
-        sendResponse({ success: false, message: "No pending note found. Please try selecting the text again." });
-        return;
-      }
-
-      const { provider: providerId, providerConfig } = await chrome.storage.sync.get(["provider", "providerConfig"]);
-      const provider = getProvider(providerId || DEFAULT_PROVIDER);
-
-      if (!provider) throw new Error("Provider not configured.");
-
-      const config = providerConfig || {};
-      const content = provider.buildContent(pending.selectedText, msg.userNote, pending.pageUrl);
-      await provider.send(config, content);
-
-      // Save to local history
-      const { notes = [] } = await chrome.storage.local.get("notes");
-      notes.unshift({
-        selectedText: pending.selectedText,
-        userNote: msg.userNote,
-        pageUrl: pending.pageUrl,
-        pageTitle: pending.pageTitle,
-        provider: provider.id,
-        timestamp: Date.now()
-      });
-      if (notes.length > MAX_NOTES) notes.length = MAX_NOTES;
-      await chrome.storage.local.set({ notes });
-
-      // Clean up
-      await chrome.storage.session.remove("pending_" + tabId);
-      sendResponse({ success: true, message: "Saved to " + provider.name + " ✓" });
+      const pendingSelection = await QuickNotesStorage.getPendingSelection(tabId);
+      const result = await QuickNotesNoteService.savePendingNote(pendingSelection, msg.userNote);
+      await QuickNotesStorage.clearPendingSelection(tabId);
+      sendResponse({ success: true, message: result.message });
     } catch (err) {
       sendResponse({ success: false, message: "Failed: " + err.message });
     }
@@ -95,3 +73,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   return true; // keep message channel open for async response
 });
+
+async function openFallbackNoteWindow(tabId, pendingSelection) {
+  await QuickNotesStorage.clearPendingSelection(tabId);
+  await QuickNotesStorage.setFallbackPendingNote(pendingSelection);
+
+  const noteUrl = chrome.runtime.getURL("note.html");
+
+  try {
+    await chrome.windows.create({
+      url: noteUrl,
+      type: "popup",
+      width: 460,
+      height: 640
+    });
+  } catch (err) {
+    await chrome.tabs.create({ url: noteUrl });
+  }
+}

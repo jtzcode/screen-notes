@@ -5,8 +5,9 @@ document.getElementById("open-options").addEventListener("click", (e) => {
 });
 
 // Load and render notes
-chrome.storage.local.get("notes", ({ notes = [] }) => {
+async function loadNotes() {
   const container = document.getElementById("notes-list");
+  const notes = await QuickNotesStorage.getNotes();
 
   if (notes.length === 0) return; // keep the empty state message
 
@@ -37,9 +38,7 @@ chrome.storage.local.get("notes", ({ notes = [] }) => {
     `;
 
     card.querySelector(".btn-delete").addEventListener("click", async () => {
-      const { notes: current = [] } = await chrome.storage.local.get("notes");
-      const updated = current.filter(n => n.timestamp !== note.timestamp);
-      await chrome.storage.local.set({ notes: updated });
+      await QuickNotesStorage.deleteNote(note.id);
       card.remove();
       if (container.children.length === 0) {
         container.innerHTML = '<p class="empty-state">No notes yet. Select text on a webpage, right-click, and choose "Take quick notes"!</p>';
@@ -59,6 +58,11 @@ chrome.storage.local.get("notes", ({ notes = [] }) => {
 
     container.appendChild(card);
   }
+}
+
+loadNotes().catch((err) => {
+  const container = document.getElementById("notes-list");
+  container.innerHTML = '<p class="empty-state">Failed to load notes: ' + escapeHtml(err.message) + "</p>";
 });
 
 function truncate(str, max) {
