@@ -18,6 +18,7 @@ This directory adds a macOS-native note flow for PDF reading in Preview:
 - `scripts/configure-flomo-webhook.sh` — one-time webhook configuration.
 - `scripts/take-notes-service.sh` — workflow runner: prompt note dialog + post to Flomo.
 - `scripts/install-quick-action.sh` — installs a `Take Notes` Quick Action into `~/Library/Services`.
+- `../docs/mac-engineering-overview.md` — implementation details and debugging guide.
 
 ## One-time setup
 

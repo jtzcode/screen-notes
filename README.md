@@ -73,6 +73,7 @@ This repo also includes a macOS companion flow under `mac/` for Preview PDF read
 - Install with `./mac/scripts/install-quick-action.sh`
 
 See [`mac/README.md`](mac/README.md) for setup.
+See [`docs/mac-engineering-overview.md`](docs/mac-engineering-overview.md) for implementation and debugging details.
 
 ## Adding a new provider
 
