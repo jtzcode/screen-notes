@@ -117,7 +117,6 @@ function run(argv) {
   const W = 500;
   const pad = 22;
   const innerW = W - 2 * pad;
-  const titleH = 30;
   const subtitleH = 34;
   const helperH = 16;
   const btnH = 32;
@@ -138,7 +137,7 @@ function run(argv) {
   // Layout (bottom-up)
   const botPad = 16;
   const topPad = 18;
-  const totalH = botPad + btnH + 12 + helperH + sectionGap + editorH + sectionGap + prevH + sectionGap + subtitleH + 6 + titleH + topPad;
+  const totalH = botPad + btnH + 12 + helperH + sectionGap + editorH + sectionGap + prevH + sectionGap + subtitleH + topPad;
 
   const panel = $.NSPanel.alloc.initWithContentRectStyleMaskBackingDefer(
     $.NSMakeRect(0, 0, W, totalH),
@@ -150,6 +149,22 @@ function run(argv) {
   panel.setLevel($.NSFloatingWindowLevel);
   panel.setBackgroundColor($.NSColor.windowBackgroundColor);
   const cv = panel.contentView;
+
+  const slogans = [
+    "Read widely. Think slowly. Write clearly.",
+    "A good note is a thought made visible.",
+    "What you reread shapes what you remember.",
+    "Turn fragments into understanding.",
+    "Pause, reflect, then keep only the essential.",
+    "Reading collects sparks. Thinking makes fire.",
+    "Small notes become long memory.",
+    "Clarity begins when you name the idea."
+  ];
+  const slogan = slogans[Math.floor(Math.random() * slogans.length)];
+  const sloganFont =
+    $.NSFont.fontWithNameSize($("Baskerville-Italic"), 15) ||
+    $.NSFont.fontWithNameSize($("Times New Roman Italic"), 15) ||
+    $.NSFont.italicSystemFontOfSize(15);
 
   var y = botPad;
 
@@ -181,7 +196,7 @@ function run(argv) {
   const helperText = $.NSTextField.alloc.initWithFrame(
     $.NSMakeRect(pad, y, innerW, helperH)
   );
-  helperText.setStringValue($("Preview source and #Mac-Reading are added automatically in Flomo."));
+  helperText.setStringValue($("Selected text and #Mac-Reading are added automatically in Flomo."));
   helperText.setBezeled(false);
   helperText.setDrawsBackground(false);
   helperText.setEditable(false);
@@ -273,28 +288,15 @@ function run(argv) {
   const subtitle = $.NSTextField.alloc.initWithFrame(
     $.NSMakeRect(pad, y, innerW, subtitleH)
   );
-  subtitle.setStringValue($("Keep the selected text for context, then write the note you want to save."));
+  subtitle.setStringValue($(slogan));
   subtitle.setBezeled(false);
   subtitle.setDrawsBackground(false);
   subtitle.setEditable(false);
   subtitle.setSelectable(false);
-  subtitle.setFont($.NSFont.systemFontOfSize(13));
+  subtitle.setFont(sloganFont);
   subtitle.setTextColor($.NSColor.secondaryLabelColor);
   subtitle.setLineBreakMode($.NSLineBreakByWordWrapping);
   cv.addSubview(subtitle);
-  y += subtitleH + 6;
-
-  const title = $.NSTextField.alloc.initWithFrame(
-    $.NSMakeRect(pad, y, innerW, titleH)
-  );
-  title.setStringValue($("Take Notes"));
-  title.setBezeled(false);
-  title.setDrawsBackground(false);
-  title.setEditable(false);
-  title.setSelectable(false);
-  title.setFont($.NSFont.boldSystemFontOfSize(23));
-  title.setTextColor($.NSColor.labelColor);
-  cv.addSubview(title);
 
   if (isSmokeTest) {
     return "__SCREEN_NOTES_SMOKE_TEST_OK__";
