@@ -6,7 +6,7 @@ This directory adds a macOS-native note flow for selected text in apps that expo
 2. Trigger a Quick Action named `Take Notes`.
 3. A multi-line macOS note dialog appears with the selected text preview.
 4. Save sends the note to Flomo webhook API.
-5. After save, the tool shows an in-app success or error dialog instead of relying on Notification Center banners.
+5. After save, the tool posts a Notification Center banner for success and shows an in-app dialog for errors or setup issues.
 
 ## Feasibility and limits
 

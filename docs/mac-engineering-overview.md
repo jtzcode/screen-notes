@@ -42,7 +42,7 @@ When `Take Notes` runs:
    - source document name or source app name
    - tag `#Mac-Reading`
 7. POST JSON to Flomo webhook.
-8. Write logs + show an in-app success/failure feedback dialog.
+8. Write logs + post a success banner; use in-app dialogs for failures or setup issues.
 
 ## 4) Important macOS concepts
 

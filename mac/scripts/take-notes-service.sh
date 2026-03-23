@@ -41,6 +41,10 @@ function run(argv) {
 JXA
 }
 
+notify_banner() {
+  /usr/bin/osascript -e "display notification \"$1\" with title \"Screen Notes\"" >/dev/null 2>&1 || true
+}
+
 get_preview_doc_name() {
   /usr/bin/osascript <<'APPLESCRIPT' 2>/dev/null || true
 try
@@ -426,4 +430,4 @@ fi
 
 rm -f "$RESP_FILE"
 log_line "Completed successfully."
-show_feedback "success" "Saved to Flomo."
+notify_banner "Saved to Flomo."
