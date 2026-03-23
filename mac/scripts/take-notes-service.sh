@@ -48,77 +48,182 @@ function run(argv) {
     $.NSApplicationActivateIgnoringOtherApps | $.NSApplicationActivateAllWindows
   );
 
-  const alert = $.NSAlert.alloc.init;
-  alert.setMessageText("Take Notes");
-  alert.addButtonWithTitle("Save");
-  alert.addButtonWithTitle("Cancel");
-  alert.setAlertStyle($.NSInformationalAlertStyle);
+  ObjC.registerSubclass({
+    name: "SNHelper",
+    methods: {
+      "doSave:": {
+        types: ["void", ["id"]],
+        implementation: function(_) {
+          $.NSApplication.sharedApplication.stopModalWithCode(1000);
+        }
+      },
+      "doCancel:": {
+        types: ["void", ["id"]],
+        implementation: function(_) {
+          $.NSApplication.sharedApplication.stopModalWithCode(1001);
+        }
+      }
+    }
+  });
+  const helper = $.SNHelper.alloc.init;
 
-  const containerWidth = 600;
-  const previewHeight = 96;
-  const editorHeight = 220;
-  const spacing = 12;
-  const container = $.NSView.alloc.initWithFrame(
-    $.NSMakeRect(0, 0, containerWidth, previewHeight + editorHeight + spacing)
+  const W = 380;
+  const pad = 16;
+  const innerW = W - 2 * pad;
+  const labelH = 16;
+  const btnH = 28;
+  const editorH = 90;
+  const maxPrevH = 64;
+
+  // Estimate preview height
+  const lineH = 17;
+  const cpl = Math.floor(innerW / 7.5);
+  const numLines = snippet.split("\n").reduce(function(n, ln) {
+    return n + Math.max(1, Math.ceil((ln.length || 1) / cpl));
+  }, 0);
+  const prevH = Math.max(24, Math.min(numLines * lineH + 8, maxPrevH));
+
+  // Layout (bottom-up)
+  const botPad = 10;
+  const cardH = labelH + prevH;
+  const totalH = botPad + btnH + 8 + editorH + 2 + labelH + 8 + cardH + 8;
+
+  const panel = $.NSPanel.alloc.initWithContentRectStyleMaskBackingDefer(
+    $.NSMakeRect(0, 0, W, totalH),
+    $.NSTitledWindowMask,
+    $.NSBackingStoreBuffered,
+    false
   );
+  panel.setTitle($("\u270F\uFE0F Take Notes"));
+  panel.setLevel($.NSFloatingWindowLevel);
+  const cv = panel.contentView;
 
-  const previewScroll = $.NSScrollView.alloc.initWithFrame(
-    $.NSMakeRect(0, editorHeight + spacing, containerWidth, previewHeight)
+  var y = botPad;
+
+  // -- Buttons --
+  const saveBtnW = 120;
+  const cancelBtnW = 80;
+  const saveBtn = $.NSButton.alloc.initWithFrame(
+    $.NSMakeRect(W - pad - saveBtnW, y, saveBtnW, btnH)
   );
-  previewScroll.setHasVerticalScroller(true);
-  previewScroll.setBorderType($.NSBezelBorder);
-  previewScroll.setDrawsBackground(true);
+  saveBtn.setTitle($("Save to Flomo"));
+  saveBtn.setBezelStyle(1);
+  saveBtn.setKeyEquivalent($("\r"));
+  saveBtn.setTarget(helper);
+  saveBtn.setAction("doSave:");
+  cv.addSubview(saveBtn);
 
-  const previewView = $.NSTextView.alloc.initWithFrame(
-    $.NSMakeRect(0, 0, containerWidth, previewHeight)
+  const cancelBtn = $.NSButton.alloc.initWithFrame(
+    $.NSMakeRect(W - pad - saveBtnW - 8 - cancelBtnW, y, cancelBtnW, btnH)
   );
-  previewView.setFont($.NSFont.systemFontOfSize(14));
-  previewView.setEditable(false);
-  previewView.setSelectable(true);
-  previewView.setRichText(false);
-  previewView.setImportsGraphics(false);
-  previewView.setUsesFindBar(false);
-  previewView.setAlignment($.NSLeftTextAlignment);
-  previewView.setTextColor($.NSColor.secondaryLabelColor);
-  previewView.setBackgroundColor($.NSColor.controlBackgroundColor);
-  previewView.setTextContainerInset($.NSMakeSize(10, 10));
-  previewView.textContainer.setWidthTracksTextView(true);
-  previewView.setString($(snippet));
-  previewScroll.setDocumentView(previewView);
+  cancelBtn.setTitle($("Cancel"));
+  cancelBtn.setBezelStyle(1);
+  cancelBtn.setKeyEquivalent($("\x1b"));
+  cancelBtn.setTarget(helper);
+  cancelBtn.setAction("doCancel:");
+  cv.addSubview(cancelBtn);
+  y += btnH + 8;
 
+  // -- Editor --
   const scroll = $.NSScrollView.alloc.initWithFrame(
-    $.NSMakeRect(0, 0, containerWidth, editorHeight)
+    $.NSMakeRect(pad, y, innerW, editorH)
   );
   scroll.setHasVerticalScroller(true);
   scroll.setBorderType($.NSBezelBorder);
   scroll.setDrawsBackground(true);
+  scroll.setWantsLayer(true);
+  scroll.setValueForKeyPath($(6), "layer.cornerRadius");
+  scroll.setValueForKeyPath($(true), "layer.masksToBounds");
 
   const textView = $.NSTextView.alloc.initWithFrame(
-    $.NSMakeRect(0, 0, containerWidth, editorHeight)
+    $.NSMakeRect(0, 0, innerW, editorH)
   );
-  textView.setFont($.NSFont.systemFontOfSize(15));
+  textView.setFont($.NSFont.systemFontOfSize(13));
   textView.setEditable(true);
   textView.setRichText(false);
   textView.setImportsGraphics(false);
   textView.setUsesFindBar(false);
-  textView.setAlignment($.NSLeftTextAlignment);
-  textView.setTextContainerInset($.NSMakeSize(10, 10));
+  textView.setTextContainerInset($.NSMakeSize(6, 4));
   textView.textContainer.setWidthTracksTextView(true);
   scroll.setDocumentView(textView);
+  cv.addSubview(scroll);
+  y += editorH + 2;
 
-  container.addSubview(previewScroll);
-  container.addSubview(scroll);
-  alert.setAccessoryView(container);
+  // -- YOUR NOTE label --
+  const noteLabel = $.NSTextField.alloc.initWithFrame(
+    $.NSMakeRect(pad, y, innerW, labelH)
+  );
+  noteLabel.setStringValue($("YOUR NOTE"));
+  noteLabel.setBezeled(false);
+  noteLabel.setDrawsBackground(false);
+  noteLabel.setEditable(false);
+  noteLabel.setSelectable(false);
+  noteLabel.setFont($.NSFont.boldSystemFontOfSize(10));
+  noteLabel.setTextColor($.NSColor.secondaryLabelColor);
+  cv.addSubview(noteLabel);
+  y += labelH + 8;
 
-  alert.window.setLevel($.NSFloatingWindowLevel);
-  alert.window.makeKeyAndOrderFront(null);
+  // -- Selected text card --
+  const card = $.NSView.alloc.initWithFrame(
+    $.NSMakeRect(pad, y, innerW, cardH)
+  );
+  card.setWantsLayer(true);
+  card.setValueForKeyPath($.NSColor.controlBackgroundColor, "layer.backgroundColor");
+  card.setValueForKeyPath($(6), "layer.cornerRadius");
+  card.setValueForKeyPath($(true), "layer.masksToBounds");
+
+  const selLabel = $.NSTextField.alloc.initWithFrame(
+    $.NSMakeRect(0, cardH - labelH - 2, innerW, labelH)
+  );
+  selLabel.setStringValue($("SELECTED TEXT"));
+  selLabel.setBezeled(false);
+  selLabel.setDrawsBackground(false);
+  selLabel.setEditable(false);
+  selLabel.setSelectable(false);
+  selLabel.setFont($.NSFont.boldSystemFontOfSize(10));
+  selLabel.setTextColor($.NSColor.tertiaryLabelColor);
+  card.addSubview(selLabel);
+
+  const previewScroll = $.NSScrollView.alloc.initWithFrame(
+    $.NSMakeRect(0, 0, innerW, prevH)
+  );
+  previewScroll.setHasVerticalScroller(true);
+  previewScroll.setBorderType($.NSNoBorder);
+  previewScroll.setDrawsBackground(false);
+
+  const previewView = $.NSTextView.alloc.initWithFrame(
+    $.NSMakeRect(0, 0, innerW, prevH)
+  );
+  previewView.setFont($.NSFont.systemFontOfSize(13));
+  previewView.setEditable(false);
+  previewView.setSelectable(true);
+  previewView.setRichText(false);
+  previewView.setTextColor($.NSColor.secondaryLabelColor);
+  previewView.setDrawsBackground(false);
+  previewView.setTextContainerInset($.NSMakeSize(6, 2));
+  previewView.textContainer.setWidthTracksTextView(true);
+  previewView.setString($(snippet));
+  previewScroll.setDocumentView(previewView);
+  card.addSubview(previewScroll);
+  cv.addSubview(card);
 
   if (isSmokeTest) {
     return "__SCREEN_NOTES_SMOKE_TEST_OK__";
   }
 
-  const response = alert.runModal;
-  if (response !== $.NSAlertFirstButtonReturn) {
+  // Center on screen (panel.center() is not bridged in JXA)
+  const screen = $.NSScreen.mainScreen.frame;
+  const panelFrame = panel.frame;
+  const cx = (screen.size.width - panelFrame.size.width) / 2;
+  const cy = (screen.size.height - panelFrame.size.height) / 2;
+  panel.setFrameOrigin($.NSMakePoint(cx, cy));
+
+  panel.makeKeyAndOrderFront(null);
+  panel.makeFirstResponder(textView);
+  const result = app.runModalForWindow(panel);
+  panel.orderOut(null);
+
+  if (result !== 1000) {
     return "__SCREEN_NOTES_CANCELLED__";
   }
 

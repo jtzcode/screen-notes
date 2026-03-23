@@ -134,74 +134,143 @@ func showAlert(title: String, message: String, style: NSAlert.Style = .warning) 
 }
 
 @MainActor
+final class ModalButtonHelper: NSObject {
+  @objc func confirmAction(_ sender: Any?) {
+    NSApp.stopModal(withCode: NSApplication.ModalResponse(rawValue: 1000))
+  }
+  @objc func cancelAction(_ sender: Any?) {
+    NSApp.stopModal(withCode: NSApplication.ModalResponse(rawValue: 1001))
+  }
+}
+
+@MainActor
 func showComposer(selectedText: String) -> String? {
-  let selectedView = NSTextView(frame: .zero)
-  selectedView.isEditable = false
-  selectedView.font = .systemFont(ofSize: 13)
-  selectedView.string = selectedText
-  selectedView.textContainerInset = NSSize(width: 8, height: 8)
+  let W: CGFloat = 380
+  let pad: CGFloat = 16
+  let innerW = W - 2 * pad
+  let labelH: CGFloat = 16
+  let btnH: CGFloat = 28
+  let editorH: CGFloat = 90
+  let maxPrevH: CGFloat = 64
 
-  let selectedScroll = NSScrollView(frame: .zero)
-  selectedScroll.documentView = selectedView
-  selectedScroll.hasVerticalScroller = true
-  selectedScroll.borderType = .bezelBorder
-  selectedScroll.translatesAutoresizingMaskIntoConstraints = false
-  selectedScroll.heightAnchor.constraint(equalToConstant: 140).isActive = true
+  // Measure preview height
+  let ts = NSTextStorage(string: selectedText)
+  ts.font = .systemFont(ofSize: 13)
+  let tc = NSTextContainer(containerSize: NSSize(width: innerW - 12, height: .greatestFiniteMagnitude))
+  tc.lineFragmentPadding = 0
+  let lm = NSLayoutManager()
+  lm.addTextContainer(tc)
+  ts.addLayoutManager(lm)
+  lm.glyphRange(for: tc)
+  let prevH = max(CGFloat(24), min(ceil(lm.usedRect(for: tc).height) + 8, maxPrevH))
 
-  let noteView = NSTextView(frame: .zero)
-  noteView.isEditable = true
+  let botPad: CGFloat = 10
+  let cardH = labelH + prevH
+  let totalH = botPad + btnH + 8 + editorH + 2 + labelH + 8 + cardH + 8
+
+  let panel = NSPanel(
+    contentRect: NSRect(x: 0, y: 0, width: W, height: totalH),
+    styleMask: [.titled],
+    backing: .buffered,
+    defer: false
+  )
+  panel.title = "\u{270F}\u{FE0F} Take Notes"
+  panel.level = .floating
+  panel.isReleasedWhenClosed = false
+  let cv = panel.contentView!
+
+  let helper = ModalButtonHelper()
+  var y = botPad
+
+  // -- Buttons --
+  let saveBtnW: CGFloat = 120
+  let cancelBtnW: CGFloat = 80
+
+  let saveBtn = NSButton(frame: NSRect(x: W - pad - saveBtnW, y: y, width: saveBtnW, height: btnH))
+  saveBtn.title = "Save to Flomo"
+  saveBtn.bezelStyle = .rounded
+  saveBtn.keyEquivalent = "\r"
+  saveBtn.target = helper
+  saveBtn.action = #selector(ModalButtonHelper.confirmAction)
+  cv.addSubview(saveBtn)
+
+  let cancelBtn = NSButton(frame: NSRect(x: W - pad - saveBtnW - 8 - cancelBtnW, y: y, width: cancelBtnW, height: btnH))
+  cancelBtn.title = "Cancel"
+  cancelBtn.bezelStyle = .rounded
+  cancelBtn.keyEquivalent = "\u{1b}"
+  cancelBtn.target = helper
+  cancelBtn.action = #selector(ModalButtonHelper.cancelAction)
+  cv.addSubview(cancelBtn)
+  y += btnH + 8
+
+  // -- Editor --
+  let noteView = NSTextView(frame: NSRect(x: 0, y: 0, width: innerW, height: editorH))
   noteView.font = .systemFont(ofSize: 13)
-  noteView.textContainerInset = NSSize(width: 8, height: 8)
+  noteView.isEditable = true
+  noteView.isRichText = false
+  noteView.textContainerInset = NSSize(width: 6, height: 4)
+  noteView.textContainer?.widthTracksTextView = true
 
-  let noteScroll = NSScrollView(frame: .zero)
+  let noteScroll = NSScrollView(frame: NSRect(x: pad, y: y, width: innerW, height: editorH))
   noteScroll.documentView = noteView
   noteScroll.hasVerticalScroller = true
   noteScroll.borderType = .bezelBorder
-  noteScroll.translatesAutoresizingMaskIntoConstraints = false
-  noteScroll.heightAnchor.constraint(equalToConstant: 180).isActive = true
+  noteScroll.wantsLayer = true
+  noteScroll.layer?.cornerRadius = 6
+  noteScroll.layer?.masksToBounds = true
+  cv.addSubview(noteScroll)
+  y += editorH + 2
 
-  let stack = NSStackView()
-  stack.orientation = .vertical
-  stack.spacing = 8
-  stack.edgeInsets = NSEdgeInsets(top: 4, left: 0, bottom: 0, right: 0)
-  stack.translatesAutoresizingMaskIntoConstraints = false
+  // -- YOUR NOTE label --
+  let noteLabel = NSTextField(labelWithString: "YOUR NOTE")
+  noteLabel.font = .boldSystemFont(ofSize: 10)
+  noteLabel.textColor = .secondaryLabelColor
+  noteLabel.frame = NSRect(x: pad, y: y, width: innerW, height: labelH)
+  cv.addSubview(noteLabel)
+  y += labelH + 8
 
-  let selectedLabel = NSTextField(labelWithString: "Selected Text")
-  let noteLabel = NSTextField(labelWithString: "Your Note")
+  // -- Selected text card --
+  let card = NSView(frame: NSRect(x: pad, y: y, width: innerW, height: cardH))
+  card.wantsLayer = true
+  card.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+  card.layer?.cornerRadius = 6
+  card.layer?.masksToBounds = true
 
-  stack.addArrangedSubview(selectedLabel)
-  stack.addArrangedSubview(selectedScroll)
-  stack.addArrangedSubview(noteLabel)
-  stack.addArrangedSubview(noteScroll)
+  let selLabel = NSTextField(labelWithString: "SELECTED TEXT")
+  selLabel.font = .boldSystemFont(ofSize: 10)
+  selLabel.textColor = .tertiaryLabelColor
+  selLabel.frame = NSRect(x: 8, y: cardH - labelH - 2, width: innerW - 16, height: labelH)
+  card.addSubview(selLabel)
 
-  let container = NSView(frame: NSRect(x: 0, y: 0, width: 560, height: 380))
-  container.addSubview(stack)
+  let prevView = NSTextView(frame: NSRect(x: 0, y: 0, width: innerW, height: prevH))
+  prevView.font = .systemFont(ofSize: 13)
+  prevView.isEditable = false
+  prevView.isSelectable = true
+  prevView.isRichText = false
+  prevView.string = selectedText
+  prevView.textColor = .secondaryLabelColor
+  prevView.drawsBackground = false
+  prevView.textContainerInset = NSSize(width: 6, height: 2)
+  prevView.textContainer?.widthTracksTextView = true
 
-  NSLayoutConstraint.activate([
-    stack.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-    stack.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-    stack.topAnchor.constraint(equalTo: container.topAnchor),
-    stack.bottomAnchor.constraint(equalTo: container.bottomAnchor)
-  ])
-
-  let alert = NSAlert()
-  alert.messageText = "Take Notes"
-  alert.informativeText = "Add your note, then save to Flomo."
-  alert.alertStyle = .informational
-  alert.addButton(withTitle: "Save to Flomo")
-  alert.addButton(withTitle: "Cancel")
-  alert.accessoryView = container
+  let prevScroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: innerW, height: prevH))
+  prevScroll.documentView = prevView
+  prevScroll.hasVerticalScroller = true
+  prevScroll.borderType = .noBorder
+  prevScroll.drawsBackground = false
+  card.addSubview(prevScroll)
+  cv.addSubview(card)
 
   NSApp.activate(ignoringOtherApps: true)
   _ = NSRunningApplication.current.activate(options: [.activateIgnoringOtherApps, .activateAllWindows])
-  alert.window.level = .floating
-  alert.window.makeKeyAndOrderFront(nil)
+  panel.center()
+  panel.makeKeyAndOrderFront(nil)
+  panel.makeFirstResponder(noteView)
 
-  let response = alert.runModal()
-  guard response == .alertFirstButtonReturn else {
-    return nil
-  }
+  let result = NSApp.runModal(for: panel)
+  panel.orderOut(nil)
 
+  guard result.rawValue == 1000 else { return nil }
   return noteView.string.trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
