@@ -1,17 +1,18 @@
-# Screen Notes for macOS (Preview + Flomo)
+# Screen Notes for macOS (Quick Actions + Flomo)
 
-This directory adds a macOS-native note flow for PDF reading in Preview:
+This directory adds a macOS-native note flow for selected text in apps that expose macOS Quick Actions / Services:
 
-1. Select text in Preview.
+1. Select text in Preview, a browser, a reader app, or another compatible macOS app.
 2. Trigger a Quick Action named `Take Notes`.
 3. A multi-line macOS note dialog appears with the selected text preview.
 4. Save sends the note to Flomo webhook API.
+5. After save, the tool shows an in-app success or error dialog instead of relying on Notification Center banners.
 
 ## Feasibility and limits
 
-- You cannot inject a fully custom top-level item directly into Preview's private highlight menu.
-- You can reliably integrate through macOS **Quick Actions / Services**, which Preview exposes for selected text.
-- In practice, Preview usually keeps custom actions under **Quick Actions** or **Services** rather than the first context-menu level.
+- You cannot inject a fully custom top-level item directly into an app's private right-click menu.
+- You can reliably integrate through macOS **Quick Actions / Services** in apps that expose selected text to the Services system.
+- In practice, many apps keep custom actions under **Quick Actions** or **Services** rather than the first context-menu level.
 - The fastest supported way to trigger `Take Notes` is to assign it a keyboard shortcut in **System Settings** → **Keyboard** → **Keyboard Shortcuts** → **Services**.
 - The user experience is close to what you want, and works across many macOS apps.
 
@@ -58,10 +59,10 @@ To remove and reset it:
 ./mac/scripts/uninstall-quick-action.sh
 ```
 
-### 3) Verify in Preview
+### 3) Verify in an app with selected text support
 
-1. Reopen Preview.
-2. Select text in a PDF.
+1. Reopen Preview, a browser, or another compatible app.
+2. Select some text.
 3. Right-click and find **Take Notes** under **Quick Actions** or **Services**.
 4. On first run, wait a few seconds because the helper may build once.
 5. Optional: assign a keyboard shortcut to **Take Notes** in **System Settings** → **Keyboard** → **Keyboard Shortcuts** → **Services** for a faster flow than navigating the context menu each time.
@@ -70,7 +71,7 @@ If the item is missing:
 
 1. Open **System Settings** → **Keyboard** → **Keyboard Shortcuts** → **Services**.
 2. Enable **Take Notes**.
-3. Reopen Preview and try again.
+3. Reopen the source app and try again.
 
 If clicking does nothing:
 
@@ -119,7 +120,7 @@ If you prefer manual setup:
 
 <your note>
 
-<preview document name>
+<preview document name or source app name>
 
 #Mac-Reading
 ```

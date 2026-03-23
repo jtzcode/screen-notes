@@ -6,7 +6,7 @@ This note explains how the macOS `Take Notes` tool works, using beginner-friendl
 
 The mac tool is not a Preview plugin. It uses macOS Services:
 
-1. You select text in Preview.
+1. You select text in a macOS app that exposes selected text to Services.
 2. You click the Quick Action `Take Notes`.
 3. macOS runs a workflow at `~/Library/Services/Take Notes.workflow`.
 4. The workflow runs a shell script.
@@ -22,8 +22,8 @@ Key files:
 
 ## 2) Why this design
 
-- Preview has no stable public API for custom right-click menu injection.
-- Quick Action/Service is the supported macOS path for selected text.
+- Apps like Preview still do not expose a stable public API for custom right-click menu injection.
+- Quick Action/Service is the supported macOS path for selected text across compatible apps.
 - Shell + AppleScript/JXA is lightweight and easy to debug.
 
 ## 3) Request flow details
@@ -33,16 +33,16 @@ When `Take Notes` runs:
 1. Read selected text from stdin.
 2. If stdin is empty, fallback to clipboard (`pbpaste`).
 3. Read webhook URL from config JSON.
-4. Ask Preview for current document name (`name of front document`).
+4. Ask Preview for the front document name when available; otherwise fall back to the current source app name.
 5. Show a multi-line note editor dialog (JXA + AppKit).
 6. Build final note content:
    - selected text
    - separator
    - your note
-   - source document name
+   - source document name or source app name
    - tag `#Mac-Reading`
 7. POST JSON to Flomo webhook.
-8. Write logs + show success/failure notification.
+8. Write logs + show an in-app success/failure feedback dialog.
 
 ## 4) Important macOS concepts
 

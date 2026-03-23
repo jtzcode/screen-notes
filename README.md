@@ -63,11 +63,11 @@ Go to [Flomo](https://flomoapp.com) → Settings → API → copy the webhook UR
 └── icons/             # Extension icons (16, 48, 128px)
 ```
 
-## macOS Preview Workflow
+## macOS Quick Action Workflow
 
-This repo also includes a macOS companion flow under `mac/` for Preview PDF reading:
+This repo also includes a macOS companion flow under `mac/` for selected text in macOS apps that expose **Quick Actions / Services**:
 
-- Trigger via macOS Quick Action/Service from selected text in Preview
+- Trigger via macOS Quick Action/Service from selected text in Preview, browsers, reader apps, and other compatible apps
 - Pop native note window
 - Save directly to Flomo webhook
 - Install with `./mac/scripts/install-quick-action.sh`
