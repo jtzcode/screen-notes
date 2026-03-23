@@ -1,43 +1,90 @@
-# Quick Notes — Chrome Extension
+# Screen Notes
 
-Highlight text on any webpage, jot down your thoughts, and save to your favorite note app — all without leaving the page.
+Capture notes from selected text and send them to Flomo.
+
+This project now has two main surfaces:
+
+- a **browser extension** for notes from web pages
+- a **macOS Quick Action** for notes from selected text in compatible macOS apps
 
 ![Quick Note floating bubble](screenshots/intro.png)
 
-## Features
+## What it does
 
-- **Context menu integration** — Select text, right-click → "Take quick notes"
-- **Floating bubble** — A note-taking popup appears right next to your selection (no new windows)
-- **Save to Flomo** — Notes are sent to [Flomo](https://flomoapp.com) via webhook API
-- **Notes history** — Click the extension icon to browse your latest 50 notes
-- **Provider abstraction** — Designed to support multiple note apps (only Flomo for now)
-- **Shadow DOM isolation** — The bubble UI won't interfere with any website's styles
-- **Fallback note window** — If inline injection is unavailable, the note flow opens in an extension window instead of failing silently
+`screen-notes` helps you keep the original selected text as context, add your own note, and save the result to Flomo with a lightweight UI that stays close to what you were reading.
+
+### Browser extension
+
+- Right-click selected text on a web page and open the note flow
+- Use an inline floating bubble when page injection is available
+- Fall back to a separate extension note window when needed
+- Save to Flomo through webhook configuration
+- Browse recent saved notes from the extension popup
+
+### macOS Quick Action
+
+- Trigger `Take Notes` from **Quick Actions / Services** in supported macOS apps
+- Works with selected text from Preview, browsers, reader apps, emails，and other compatible apps
+- Show a native macOS note window with selected-text context
+- Save to Flomo and include source context automatically
+- Show success/failure feedback through the macOS flow
 
 ## Installation
 
-1. Clone or download this repository
-2. Open `chrome://extensions` in Chrome
-3. Enable **Developer mode** (toggle in the top right)
-4. Click **Load unpacked** and select the project folder
-5. Click the extension icon → ⚙️ to open settings
-6. Select **Flomo** as your provider and paste your webhook URL
+You can use either surface independently, or use both together.
+
+### 1) Browser extension setup
+
+1. Clone or download this repository.
+2. Open `chrome://extensions` in Chrome.
+3. Enable **Developer mode**.
+4. Click **Load unpacked** and select the project folder.
+5. Open the extension settings from the extension popup.
+6. Select **Flomo** and paste your webhook URL.
+
+### 2) macOS Quick Action setup
+
+From the project root:
+
+```bash
+./mac/scripts/configure-flomo-webhook.sh "https://flomoapp.com/iwh/xxxxx/yyyyy/"
+./mac/scripts/install-quick-action.sh
+```
+
+This installs the Quick Action workflow and the runtime script under:
+
+- `~/Library/Services/Take Notes.workflow`
+- `~/Library/Application Support/ScreenNotesMac/take-notes-service.sh`
+
+See [`mac/README.md`](mac/README.md) for the macOS setup and usage guide.
 
 ### Getting your Flomo webhook URL
 
-Go to [Flomo](https://flomoapp.com) → Settings → API → copy the webhook URL (starts with `https://flomoapp.com/iwh/...`).
+Go to [Flomo](https://flomoapp.com) → Settings → API and copy the webhook URL that starts with `https://flomoapp.com/iwh/...`.
 
 ## Usage
 
-1. Select any text on a webpage
-2. Right-click → **Take quick notes**
-3. A floating bubble appears near the selection — type your thoughts
-4. Click **Save** — the note is sent to Flomo and stored locally
-5. Click the extension icon anytime to see your recent notes
+### Browser extension flow
 
-### Note format in Flomo
+1. Select text on a web page.
+2. Right-click and choose **Take quick notes**.
+3. Write your note in the floating bubble or fallback window.
+4. Save the note to Flomo.
 
-```
+### macOS Quick Action flow
+
+1. Select text in a compatible macOS app.
+2. Open **Quick Actions** or **Services** and choose **Take Notes**.
+3. Write your note in the native macOS panel.
+4. Save the note to Flomo.
+
+If the macOS action is hard to reach from the context menu, assign a keyboard shortcut in `System Settings > Keyboard > Keyboard Shortcuts > Services`.
+
+## Note formats
+
+### Browser extension note format
+
+```text
 <selected text>
 
 <your note>
@@ -47,37 +94,44 @@ Go to [Flomo](https://flomoapp.com) → Settings → API → copy the webhook UR
 #Web-Reading
 ```
 
-## Project Structure
+### macOS Quick Action note format
 
-```
-├── manifest.json      # Chrome extension manifest (V3)
-├── background.js      # Service worker: context menu, injection, fallback orchestration
-├── content.js         # Floating bubble UI (injected into pages)
-├── providers.js       # Provider registry and provider implementations
-├── storage.js         # Shared storage boundary for settings, history, and pending state
-├── note-service.js    # Shared note save workflow used by background and fallback UI
-├── popup.html/js      # Extension icon popup: recent notes list
-├── options.html/js    # Settings page: provider selection & config
-├── note.html/js       # Fallback note window when page injection is unavailable
-├── styles.css         # Shared styles for popup, options, and fallback window
-└── icons/             # Extension icons (16, 48, 128px)
+```text
+<selected text>
+
+——————————
+
+<your note>
+
+<source document name or source app name>
+
+#Mac-Reading
 ```
 
-## macOS Quick Action Workflow
+## Project structure
 
-This repo also includes a macOS companion flow under `mac/` for selected text in macOS apps that expose **Quick Actions / Services**:
-
-- Trigger via macOS Quick Action/Service from selected text in Preview, browsers, reader apps, and other compatible apps
-- Pop native note window
-- Save directly to Flomo webhook
-- Install with `./mac/scripts/install-quick-action.sh`
-
-See [`mac/README.md`](mac/README.md) for setup.
-See [`docs/mac-engineering-overview.md`](docs/mac-engineering-overview.md) for implementation and debugging details.
+```text
+├── manifest.json           # Chrome extension manifest (V3)
+├── background.js           # Extension orchestration and context menu flow
+├── content.js              # In-page floating bubble UI
+├── providers.js            # Note provider registry
+├── storage.js              # Shared settings/history storage
+├── note-service.js         # Shared browser note save workflow
+├── popup.html/js           # Extension popup with recent notes
+├── options.html/js         # Extension settings
+├── note.html/js            # Fallback extension note window
+├── styles.css              # Shared browser UI styles
+├── mac/
+│   ├── README.md           # macOS setup and usage guide
+│   └── scripts/            # macOS install, config, and runtime scripts
+├── docs/
+│   └── mac-engineering-overview.md
+└── .copilot/skills/        # Reusable design guidance used in this repo
+```
 
 ## Adding a new provider
 
-Add an entry to `providers.js`:
+Add a new entry to `providers.js`:
 
 ```js
 NoteProviders.notion = {
@@ -92,17 +146,12 @@ NoteProviders.notion = {
 };
 ```
 
-The options page and save logic will pick it up automatically. If the provider uses a different API host, update `host_permissions` in [manifest.json](manifest.json) as well.
+If a provider needs a different API host, update `host_permissions` in `manifest.json` as well.
 
-## Permissions
+## Related docs
 
-| Permission | Why |
-|---|---|
-| `contextMenus` | "Take quick notes" in the right-click menu |
-| `activeTab` | Access the current tab to inject the bubble |
-| `scripting` | Inject `content.js` into pages |
-| `storage` | Store settings and note history |
-| `host_permissions: flomoapp.com` | Send notes to the Flomo API |
+- [`mac/README.md`](mac/README.md)
+- [`docs/mac-engineering-overview.md`](docs/mac-engineering-overview.md)
 
 ## License
 
