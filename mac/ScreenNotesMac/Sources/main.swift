@@ -128,6 +128,8 @@ func showAlert(title: String, message: String, style: NSAlert.Style = .warning) 
   alert.messageText = title
   alert.informativeText = message
   alert.addButton(withTitle: "OK")
+  alert.window.level = .floating
+  alert.window.makeKeyAndOrderFront(nil)
   alert.runModal()
 }
 
@@ -192,6 +194,8 @@ func showComposer(selectedText: String) -> String? {
 
   NSApp.activate(ignoringOtherApps: true)
   _ = NSRunningApplication.current.activate(options: [.activateIgnoringOtherApps, .activateAllWindows])
+  alert.window.level = .floating
+  alert.window.makeKeyAndOrderFront(nil)
 
   let response = alert.runModal()
   guard response == .alertFirstButtonReturn else {

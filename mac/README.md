@@ -11,6 +11,8 @@ This directory adds a macOS-native note flow for PDF reading in Preview:
 
 - You cannot inject a fully custom top-level item directly into Preview's private highlight menu.
 - You can reliably integrate through macOS **Quick Actions / Services**, which Preview exposes for selected text.
+- In practice, Preview usually keeps custom actions under **Quick Actions** or **Services** rather than the first context-menu level.
+- The fastest supported way to trigger `Take Notes` is to assign it a keyboard shortcut in **System Settings** → **Keyboard** → **Keyboard Shortcuts** → **Services**.
 - The user experience is close to what you want, and works across many macOS apps.
 
 ## What's included
@@ -62,6 +64,7 @@ To remove and reset it:
 2. Select text in a PDF.
 3. Right-click and find **Take Notes** under **Quick Actions** or **Services**.
 4. On first run, wait a few seconds because the helper may build once.
+5. Optional: assign a keyboard shortcut to **Take Notes** in **System Settings** → **Keyboard** → **Keyboard Shortcuts** → **Services** for a faster flow than navigating the context menu each time.
 
 If the item is missing:
 
@@ -79,6 +82,12 @@ If clicking does nothing:
 ```
 
 If you see `Operation not permitted` pointing to a script under `Documents`, run install again to refresh to the `Application Support` runtime path.
+
+For a non-interactive runtime smoke test that exercises the dialog construction path without opening a manual save flow or sending a test note to Flomo:
+
+```bash
+SCREEN_NOTES_TEST_MODE=smoke "$HOME/Library/Application Support/ScreenNotesMac/take-notes-service.sh" <<< "test text"
+```
 
 ## Manual fallback (Automator)
 

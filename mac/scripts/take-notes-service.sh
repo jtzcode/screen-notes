@@ -30,36 +30,92 @@ APPLESCRIPT
 }
 
 prompt_note_multiline() {
-  /usr/bin/osascript -l JavaScript - "$1" "$2" <<'JXA'
+  /usr/bin/osascript -l JavaScript - "$1" "${2:-}" <<'JXA'
 ObjC.import("AppKit");
 
 function run(argv) {
   const snippet = (argv.length > 0 && argv[0]) ? argv[0] : "";
-  const sourceName = (argv.length > 1 && argv[1]) ? argv[1] : "Preview";
+  const mode = (argv.length > 1 && argv[1]) ? argv[1] : "";
+  const isSmokeTest = mode === "__SCREEN_NOTES_SMOKE_TEST__";
+  const currentApp = Application.currentApplication();
+  currentApp.includeStandardAdditions = true;
+  currentApp.activate();
 
   const app = $.NSApplication.sharedApplication;
   app.setActivationPolicy($.NSApplicationActivationPolicyRegular);
   app.activateIgnoringOtherApps(true);
+  $.NSRunningApplication.currentApplication.activateWithOptions(
+    $.NSApplicationActivateIgnoringOtherApps | $.NSApplicationActivateAllWindows
+  );
 
   const alert = $.NSAlert.alloc.init;
   alert.setMessageText("Take Notes");
-  alert.setInformativeText("Source: " + sourceName + "\n\nSelected text preview:\n" + snippet);
   alert.addButtonWithTitle("Save");
   alert.addButtonWithTitle("Cancel");
   alert.setAlertStyle($.NSInformationalAlertStyle);
 
-  const container = $.NSView.alloc.initWithFrame($.NSMakeRect(0, 0, 560, 220));
-  const scroll = $.NSScrollView.alloc.initWithFrame($.NSMakeRect(0, 0, 560, 220));
+  const containerWidth = 600;
+  const previewHeight = 96;
+  const editorHeight = 220;
+  const spacing = 12;
+  const container = $.NSView.alloc.initWithFrame(
+    $.NSMakeRect(0, 0, containerWidth, previewHeight + editorHeight + spacing)
+  );
+
+  const previewScroll = $.NSScrollView.alloc.initWithFrame(
+    $.NSMakeRect(0, editorHeight + spacing, containerWidth, previewHeight)
+  );
+  previewScroll.setHasVerticalScroller(true);
+  previewScroll.setBorderType($.NSBezelBorder);
+  previewScroll.setDrawsBackground(true);
+
+  const previewView = $.NSTextView.alloc.initWithFrame(
+    $.NSMakeRect(0, 0, containerWidth, previewHeight)
+  );
+  previewView.setFont($.NSFont.systemFontOfSize(14));
+  previewView.setEditable(false);
+  previewView.setSelectable(true);
+  previewView.setRichText(false);
+  previewView.setImportsGraphics(false);
+  previewView.setUsesFindBar(false);
+  previewView.setAlignment($.NSLeftTextAlignment);
+  previewView.setTextColor($.NSColor.secondaryLabelColor);
+  previewView.setBackgroundColor($.NSColor.controlBackgroundColor);
+  previewView.setTextContainerInset($.NSMakeSize(10, 10));
+  previewView.textContainer.setWidthTracksTextView(true);
+  previewView.setString($(snippet));
+  previewScroll.setDocumentView(previewView);
+
+  const scroll = $.NSScrollView.alloc.initWithFrame(
+    $.NSMakeRect(0, 0, containerWidth, editorHeight)
+  );
   scroll.setHasVerticalScroller(true);
   scroll.setBorderType($.NSBezelBorder);
+  scroll.setDrawsBackground(true);
 
-  const textView = $.NSTextView.alloc.initWithFrame($.NSMakeRect(0, 0, 560, 220));
-  textView.setFont($.NSFont.systemFontOfSize(13));
+  const textView = $.NSTextView.alloc.initWithFrame(
+    $.NSMakeRect(0, 0, containerWidth, editorHeight)
+  );
+  textView.setFont($.NSFont.systemFontOfSize(15));
   textView.setEditable(true);
+  textView.setRichText(false);
+  textView.setImportsGraphics(false);
+  textView.setUsesFindBar(false);
+  textView.setAlignment($.NSLeftTextAlignment);
+  textView.setTextContainerInset($.NSMakeSize(10, 10));
+  textView.textContainer.setWidthTracksTextView(true);
   scroll.setDocumentView(textView);
 
+  container.addSubview(previewScroll);
   container.addSubview(scroll);
   alert.setAccessoryView(container);
+
+  alert.window.setLevel($.NSFloatingWindowLevel);
+  alert.window.makeKeyAndOrderFront(null);
+
+  if (isSmokeTest) {
+    return "__SCREEN_NOTES_SMOKE_TEST_OK__";
+  }
 
   const response = alert.runModal;
   if (response !== $.NSAlertFirstButtonReturn) {
@@ -72,6 +128,8 @@ JXA
 }
 
 log_line "Service invoked. PID=$$"
+
+TEST_MODE="${SCREEN_NOTES_TEST_MODE:-}"
 
 SELECTED_TEXT="$(cat)"
 log_line "Raw stdin bytes: ${#SELECTED_TEXT}"
@@ -89,11 +147,16 @@ if [[ -z "${SELECTED_TEXT//[[:space:]]/}" ]]; then
   exit 0
 fi
 
-WEBHOOK_URL="$(plutil -extract webhookUrl raw -o - "$CONFIG_FILE" 2>/dev/null || true)"
-if [[ -z "${WEBHOOK_URL//[[:space:]]/}" ]]; then
-  notify "Please configure Flomo webhook first."
-  log_line "Missing webhook config."
-  exit 1
+WEBHOOK_URL=""
+if [[ "$TEST_MODE" != "smoke" ]]; then
+  WEBHOOK_URL="$(plutil -extract webhookUrl raw -o - "$CONFIG_FILE" 2>/dev/null || true)"
+  if [[ -z "${WEBHOOK_URL//[[:space:]]/}" ]]; then
+    notify "Please configure Flomo webhook first."
+    log_line "Missing webhook config."
+    exit 1
+  fi
+else
+  log_line "Smoke test mode enabled."
 fi
 
 PREVIEW_TEXT="$(printf "%s" "$SELECTED_TEXT" | head -c 500)"
@@ -102,10 +165,20 @@ if [[ -z "${SOURCE_NAME//[[:space:]]/}" ]]; then
   SOURCE_NAME="Preview Document"
 fi
 
-NOTE_TEXT="$(prompt_note_multiline "$PREVIEW_TEXT" "$SOURCE_NAME")"
+PROMPT_MODE=""
+if [[ "$TEST_MODE" == "smoke" ]]; then
+  PROMPT_MODE="__SCREEN_NOTES_SMOKE_TEST__"
+fi
+
+NOTE_TEXT="$(prompt_note_multiline "$PREVIEW_TEXT" "$PROMPT_MODE")"
 
 if [[ "$NOTE_TEXT" == "__SCREEN_NOTES_CANCELLED__" ]]; then
   log_line "User cancelled note dialog."
+  exit 0
+fi
+
+if [[ "$NOTE_TEXT" == "__SCREEN_NOTES_SMOKE_TEST_OK__" ]]; then
+  log_line "Smoke test completed successfully."
   exit 0
 fi
 

@@ -85,6 +85,12 @@ tail -n 120 "$HOME/Library/Logs/ScreenNotesMac/service.log"
 automator -i "test text" "$HOME/Library/Services/Take Notes.workflow"
 ```
 
+For a non-interactive validation of the runtime script that still exercises the dialog construction path without posting to Flomo:
+
+```bash
+SCREEN_NOTES_TEST_MODE=smoke "$HOME/Library/Application Support/ScreenNotesMac/take-notes-service.sh" <<< "test text"
+```
+
 ### D) Verify workflow command path
 
 ```bash
