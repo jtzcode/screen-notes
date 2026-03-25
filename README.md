@@ -1,6 +1,6 @@
 # Screen Notes
 
-Capture notes from selected text and send them to Flomo.
+Capture notes from selected text and send them to Flomo, with optional X draft creation on macOS.
 
 This project now has two main surfaces:
 
@@ -27,6 +27,7 @@ This project now has two main surfaces:
 - Works with selected text from Preview, browsers, reader apps, emails，and other compatible apps
 - Show a native macOS note window with selected-text context
 - Save to Flomo and include source context automatically
+- Optionally open an X draft from the same note window
 - Show success/failure feedback through the macOS flow
 
 ## Installation
@@ -56,6 +57,8 @@ This installs the Quick Action workflow and the runtime script under:
 - `~/Library/Services/Take Notes.workflow`
 - `~/Library/Application Support/ScreenNotesMac/take-notes-service.sh`
 
+If you want to use the macOS `Also post to X` checkbox too, install Chrome (or Chromium/Edge) plus `bun` or Node.js with `npx`. The install script now bundles the patched `baoyu-post-to-x` skill into `~/Library/Application Support/ScreenNotesMac/skills/baoyu-post-to-x`.
+
 See [`mac/README.md`](mac/README.md) for the macOS setup and usage guide.
 
 ### Getting your Flomo webhook URL
@@ -76,7 +79,9 @@ Go to [Flomo](https://flomoapp.com) → Settings → API and copy the webhook UR
 1. Select text in a compatible macOS app.
 2. Open **Quick Actions** or **Services** and choose **Take Notes**.
 3. Write your note in the native macOS panel.
-4. Save the note to Flomo.
+4. Optionally check **Also post to X**.
+5. Save the note to Flomo.
+6. If checked, review and publish the opened X draft in Chrome.
 
 If the macOS action is hard to reach from the context menu, assign a keyboard shortcut in `System Settings > Keyboard > Keyboard Shortcuts > Services`.
 
@@ -108,6 +113,16 @@ If the macOS action is hard to reach from the context menu, assign a keyboard sh
 #Mac-Reading
 ```
 
+### macOS X draft format
+
+```text
+<selected text>
+
+——————————
+
+<your note>
+```
+
 ## Project structure
 
 ```text
@@ -123,6 +138,7 @@ If the macOS action is hard to reach from the context menu, assign a keyboard sh
 ├── styles.css              # Shared browser UI styles
 ├── mac/
 │   ├── README.md           # macOS setup and usage guide
+│   ├── skills/             # Bundled mac skills used by runtime
 │   └── scripts/            # macOS install, config, and runtime scripts
 ├── docs/
 │   └── mac-engineering-overview.md

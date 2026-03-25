@@ -2,10 +2,42 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+APP_SUPPORT_DIR="$HOME/Library/Application Support/ScreenNotesMac"
 LOG_DIR="$HOME/Library/Logs/ScreenNotesMac"
 LOG_FILE="$LOG_DIR/service.log"
-CONFIG_FILE="$HOME/Library/Application Support/ScreenNotesMac/config.json"
+CONFIG_FILE="$APP_SUPPORT_DIR/config.json"
+RUNTIME_X_SKILL_DIR="$APP_SUPPORT_DIR/skills/baoyu-post-to-x"
+CODEX_X_SKILL_DIR="${CODEX_HOME:-$HOME/.codex}/skills/baoyu-post-to-x"
+X_SKILL_DIR="$RUNTIME_X_SKILL_DIR"
+if [[ ! -d "$X_SKILL_DIR" ]]; then
+  X_SKILL_DIR="$CODEX_X_SKILL_DIR"
+fi
+X_POST_SCRIPT="$X_SKILL_DIR/scripts/x-browser.ts"
+X_PROFILE_DIR="$APP_SUPPORT_DIR/x-profile"
 mkdir -p "$LOG_DIR"
+
+X_POST_ERROR=""
+X_RUNTIME=()
+
+find_runtime_bin() {
+  local name="$1"
+  local path_value
+
+  path_value="$(command -v "$name" 2>/dev/null || true)"
+  if [[ -n "${path_value//[[:space:]]/}" ]]; then
+    printf '%s' "$path_value"
+    return 0
+  fi
+
+  for candidate in "/opt/homebrew/bin/$name" "/usr/local/bin/$name" "/usr/bin/$name"; do
+    if [[ -x "$candidate" ]]; then
+      printf '%s' "$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
 
 log_line() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >>"$LOG_FILE"
@@ -43,6 +75,138 @@ JXA
 
 notify_banner() {
   /usr/bin/osascript -e "display notification \"$1\" with title \"Screen Notes\"" >/dev/null 2>&1 || true
+}
+
+resolve_x_runtime() {
+  local bun_bin
+  local npx_bin
+
+  if bun_bin="$(find_runtime_bin bun)"; then
+    X_RUNTIME=("$bun_bin")
+    return 0
+  fi
+
+  if npx_bin="$(find_runtime_bin npx)"; then
+    X_RUNTIME=("$npx_bin" -y bun)
+    return 0
+  fi
+
+  return 1
+}
+
+extract_composer_note() {
+  /usr/bin/osascript -l JavaScript - "$1" <<'JXA'
+function run(argv) {
+  const payload = JSON.parse(argv[0] || "{}");
+  return typeof payload.note === "string" ? payload.note : "";
+}
+JXA
+}
+
+extract_composer_post_flag() {
+  /usr/bin/osascript -l JavaScript - "$1" <<'JXA'
+function run(argv) {
+  const payload = JSON.parse(argv[0] || "{}");
+  return payload.postToX ? "1" : "0";
+}
+JXA
+}
+
+build_x_post_content() {
+  local selected_text="$1"
+  local note_text="$2"
+
+  printf '%s' "$selected_text"
+  printf '\n\n%s\n\n' "——————————"
+  printf '%s' "$note_text"
+}
+
+ensure_x_skill_dependencies() {
+  local scripts_dir="$X_SKILL_DIR/scripts"
+
+  if [[ ! -f "$scripts_dir/package.json" ]]; then
+    return 0
+  fi
+
+  if [[ -d "$scripts_dir/node_modules" ]]; then
+    return 0
+  fi
+
+  if ! resolve_x_runtime; then
+    X_POST_ERROR="Install Bun or Node.js (for npx) to enable X posting."
+    return 1
+  fi
+
+  log_line "Installing X skill dependencies for $scripts_dir"
+  if (cd "$scripts_dir" && "${X_RUNTIME[@]}" install >>"$LOG_FILE" 2>&1); then
+    return 0
+  fi
+
+  X_POST_ERROR="Failed to install X skill dependencies. Check $LOG_FILE."
+  return 1
+}
+
+open_x_compose() {
+  local post_text="$1"
+  local output_file
+  local attempt=1
+
+  X_POST_ERROR=""
+
+  if [[ ! -f "$X_POST_SCRIPT" ]]; then
+    X_POST_ERROR="Install the baoyu-post-to-x skill under $RUNTIME_X_SKILL_DIR or $CODEX_X_SKILL_DIR."
+    return 1
+  fi
+
+  if ! resolve_x_runtime; then
+    X_POST_ERROR="Install Bun or Node.js (for npx) to enable X posting."
+    return 1
+  fi
+
+  if ! ensure_x_skill_dependencies; then
+    return 1
+  fi
+
+  if [[ ! -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ]] \
+    && [[ ! -x "/Applications/Chromium.app/Contents/MacOS/Chromium" ]] \
+    && [[ ! -x "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge" ]]; then
+    X_POST_ERROR="Install Google Chrome, Chromium, or Edge, or set X_BROWSER_CHROME_PATH."
+    return 1
+  fi
+
+  mkdir -p "$X_PROFILE_DIR"
+  output_file="$(mktemp "${TMPDIR:-/tmp}/screen-notes-x-post.XXXXXX.log")"
+
+  while (( attempt <= 2 )); do
+    : >"$output_file"
+    if "${X_RUNTIME[@]}" "$X_POST_SCRIPT" "$post_text" --profile "$X_PROFILE_DIR" >>"$output_file" 2>&1; then
+      cat "$output_file" >>"$LOG_FILE"
+      rm -f "$output_file"
+      return 0
+    fi
+
+    cat "$output_file" >>"$LOG_FILE"
+
+    if grep -Eq 'Chrome debug port not ready|Unable to connect' "$output_file" && (( attempt == 1 )); then
+      log_line "X compose failed due to Chrome debug port issue. Retrying after cleanup."
+      pkill -f "Chrome.*remote-debugging-port" >/dev/null 2>&1 || true
+      pkill -f "Chromium.*remote-debugging-port" >/dev/null 2>&1 || true
+      sleep 2
+      attempt=$((attempt + 1))
+      continue
+    fi
+
+    X_POST_ERROR="$(tail -n 8 "$output_file")"
+    break
+  done
+
+  rm -f "$output_file"
+
+  if [[ -z "${X_POST_ERROR//[[:space:]]/}" ]]; then
+    X_POST_ERROR="Failed to open the X compose window."
+  fi
+
+  return 1
 }
 
 get_preview_doc_name() {
@@ -119,6 +283,7 @@ function run(argv) {
   const innerW = W - 2 * pad;
   const subtitleH = 34;
   const helperH = 16;
+  const checkboxH = 22;
   const btnH = 32;
   const editorH = 150;
   const maxPrevH = 96;
@@ -137,7 +302,7 @@ function run(argv) {
   // Layout (bottom-up)
   const botPad = 16;
   const topPad = 18;
-  const totalH = botPad + btnH + 12 + helperH + sectionGap + editorH + sectionGap + prevH + sectionGap + subtitleH + topPad;
+  const totalH = botPad + btnH + 12 + helperH + 10 + checkboxH + sectionGap + editorH + sectionGap + prevH + sectionGap + subtitleH + topPad;
 
   const panel = $.NSPanel.alloc.initWithContentRectStyleMaskBackingDefer(
     $.NSMakeRect(0, 0, W, totalH),
@@ -204,7 +369,18 @@ function run(argv) {
   helperText.setFont($.NSFont.systemFontOfSize(11));
   helperText.setTextColor($.NSColor.secondaryLabelColor);
   cv.addSubview(helperText);
-  y += helperH + sectionGap;
+  y += helperH + 10;
+
+  // -- X toggle --
+  const postToXCheckbox = $.NSButton.alloc.initWithFrame(
+    $.NSMakeRect(pad - 2, y, innerW, checkboxH)
+  );
+  postToXCheckbox.setButtonType($.NSSwitchButton);
+  postToXCheckbox.setTitle($("Also post to X"));
+  postToXCheckbox.setFont($.NSFont.systemFontOfSize(13));
+  postToXCheckbox.setState($.NSControlStateValueOff);
+  cv.addSubview(postToXCheckbox);
+  y += checkboxH + sectionGap;
 
   // -- Note editor --
   const editorSurface = $.NSView.alloc.initWithFrame(
@@ -323,7 +499,10 @@ function run(argv) {
     return "__SCREEN_NOTES_CANCELLED__";
   }
 
-  return ObjC.unwrap(textView.string);
+  return JSON.stringify({
+    note: ObjC.unwrap(textView.string),
+    postToX: Number(postToXCheckbox.state) === 1
+  });
 }
 JXA
 }
@@ -376,22 +555,25 @@ elif [[ "$TEST_MODE" == "save-path" ]]; then
   PROMPT_MODE="__SCREEN_NOTES_SAVE_PATH_TEST__"
 fi
 
-NOTE_TEXT="$(prompt_note_multiline "$PREVIEW_TEXT" "$PROMPT_MODE")"
+COMPOSER_RESULT="$(prompt_note_multiline "$PREVIEW_TEXT" "$PROMPT_MODE")"
 
-if [[ "$NOTE_TEXT" == "__SCREEN_NOTES_CANCELLED__" ]]; then
+if [[ "$COMPOSER_RESULT" == "__SCREEN_NOTES_CANCELLED__" ]]; then
   log_line "User cancelled note dialog."
   exit 0
 fi
 
-if [[ "$NOTE_TEXT" == "__SCREEN_NOTES_SMOKE_TEST_OK__" ]]; then
+if [[ "$COMPOSER_RESULT" == "__SCREEN_NOTES_SMOKE_TEST_OK__" ]]; then
   log_line "Smoke test completed successfully."
   exit 0
 fi
 
-if [[ "$NOTE_TEXT" == "__SCREEN_NOTES_SAVE_PATH_OK__" ]]; then
+if [[ "$COMPOSER_RESULT" == "__SCREEN_NOTES_SAVE_PATH_OK__" ]]; then
   log_line "Save-path test completed successfully."
   exit 0
 fi
+
+NOTE_TEXT="$(extract_composer_note "$COMPOSER_RESULT")"
+POST_TO_X="$(extract_composer_post_flag "$COMPOSER_RESULT")"
 
 CONTENT="$SELECTED_TEXT
 
@@ -432,4 +614,20 @@ fi
 
 rm -f "$RESP_FILE"
 log_line "Completed successfully."
+
+if [[ "$POST_TO_X" == "1" ]]; then
+  X_POST_TEXT="$(build_x_post_content "$SELECTED_TEXT" "$NOTE_TEXT")"
+  log_line "Also post to X selected. Launching compose window."
+
+  if open_x_compose "$X_POST_TEXT"; then
+    log_line "X compose opened successfully."
+    notify_banner "Saved to Flomo and opened X draft."
+    exit 0
+  fi
+
+  log_line "X compose failed: $X_POST_ERROR"
+  notify_banner "Saved to Flomo. X draft failed to open."
+  exit 0
+fi
+
 notify_banner "Saved to Flomo."

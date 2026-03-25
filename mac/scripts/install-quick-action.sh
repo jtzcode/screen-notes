@@ -16,6 +16,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SERVICE_NAME="Take Notes"
 SERVICE_SCRIPT="$ROOT_DIR/mac/scripts/take-notes-service.sh"
+VENDORED_X_SKILL_DIR="$ROOT_DIR/mac/skills/baoyu-post-to-x"
 BUNDLE_ID="com.screennotes.mac.takenotes.v2"
 
 if [[ ! -f "$SERVICE_SCRIPT" ]]; then
@@ -37,6 +38,7 @@ WORKFLOW_DIR="$SERVICES_DIR/$SERVICE_NAME.workflow"
 CONTENTS_DIR="$WORKFLOW_DIR/Contents"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
 RUNTIME_SCRIPT="$RUNTIME_DIR/take-notes-service.sh"
+RUNTIME_X_SKILL_DIR="$RUNTIME_DIR/skills/baoyu-post-to-x"
 
 xml_escape() {
   local value="$1"
@@ -48,10 +50,65 @@ xml_escape() {
   printf '%s' "$value"
 }
 
+resolve_runtime_bin() {
+  local name="$1"
+  local path_value
+
+  path_value="$(command -v "$name" 2>/dev/null || true)"
+  if [[ -n "${path_value//[[:space:]]/}" ]]; then
+    printf '%s' "$path_value"
+    return 0
+  fi
+
+  for candidate in "/opt/homebrew/bin/$name" "/usr/local/bin/$name" "/usr/bin/$name"; do
+    if [[ -x "$candidate" ]]; then
+      printf '%s' "$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+install_x_skill_dependencies() {
+  local scripts_dir="$1"
+  local bun_bin
+  local npx_bin
+
+  if [[ -d "$scripts_dir/node_modules" ]]; then
+    return 0
+  fi
+
+  if bun_bin="$(resolve_runtime_bin bun)"; then
+    echo "Installing X skill dependencies with bun..."
+    (cd "$scripts_dir" && "$bun_bin" install) || echo "Warning: bun install failed for bundled X skill."
+    return 0
+  fi
+
+  if npx_bin="$(resolve_runtime_bin npx)"; then
+    echo "Installing X skill dependencies with npx bun..."
+    (cd "$scripts_dir" && "$npx_bin" -y bun install) || echo "Warning: npx bun install failed for bundled X skill."
+    return 0
+  fi
+
+  echo "Warning: bun/npx not found. Install one of them to enable Also post to X."
+  return 0
+}
+
 mkdir -p "$RUNTIME_DIR"
 cp "$SERVICE_SCRIPT" "$RUNTIME_SCRIPT"
 chmod +x "$RUNTIME_SCRIPT"
 xattr -d com.apple.quarantine "$RUNTIME_SCRIPT" >/dev/null 2>&1 || true
+
+if [[ -d "$VENDORED_X_SKILL_DIR" ]]; then
+  mkdir -p "$(dirname "$RUNTIME_X_SKILL_DIR")"
+  rm -rf "$RUNTIME_X_SKILL_DIR"
+  rsync -a --exclude node_modules "$VENDORED_X_SKILL_DIR/" "$RUNTIME_X_SKILL_DIR/"
+  xattr -dr com.apple.quarantine "$RUNTIME_X_SKILL_DIR" >/dev/null 2>&1 || true
+  install_x_skill_dependencies "$RUNTIME_X_SKILL_DIR/scripts"
+else
+  echo "Warning: bundled X skill not found at $VENDORED_X_SKILL_DIR"
+fi
 
 COMMAND_STRING_ESCAPED="$(xml_escape "/bin/bash \"$RUNTIME_SCRIPT\"")"
 ACTION_UUID="$(uuidgen)"
@@ -244,6 +301,9 @@ fi
 
 echo "Installed Quick Action: $WORKFLOW_DIR"
 echo "Action script: $RUNTIME_SCRIPT"
+if [[ -d "$RUNTIME_X_SKILL_DIR" ]]; then
+  echo "Bundled X skill: $RUNTIME_X_SKILL_DIR"
+fi
 if [[ "${1:-}" == "--dry-run" ]]; then
   echo "Dry run mode: workflow written to /tmp only."
 else

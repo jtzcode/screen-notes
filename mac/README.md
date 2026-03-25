@@ -1,12 +1,14 @@
-# Screen Notes for macOS (Quick Actions + Flomo)
+# Screen Notes for macOS (Quick Actions + Flomo + X)
 
 This directory adds a macOS-native note flow for selected text in apps that expose macOS Quick Actions / Services:
 
 1. Select text in Preview, a browser, a reader app, or another compatible macOS app.
 2. Trigger a Quick Action named `Take Notes`.
 3. A multi-line macOS note dialog appears with the selected text preview.
-4. Save sends the note to Flomo webhook API.
-5. After save, the tool posts a Notification Center banner for success and shows an in-app dialog for errors or setup issues.
+4. Optionally check `Also post to X` to open an X draft after saving.
+5. Save sends the note to Flomo webhook API.
+6. If `Also post to X` is checked, the tool opens a Chrome compose window with your note prefilled for manual review and publishing.
+7. After save, the tool posts a Notification Center banner for success and shows an in-app dialog for errors or setup issues.
 
 ## Feasibility and limits
 
@@ -19,7 +21,7 @@ This directory adds a macOS-native note flow for selected text in apps that expo
 ## What's included
 
 - `scripts/configure-flomo-webhook.sh` — one-time webhook configuration.
-- `scripts/take-notes-service.sh` — workflow runner: prompt note dialog + post to Flomo.
+- `scripts/take-notes-service.sh` — workflow runner: prompt note dialog + post to Flomo, optionally open X draft.
 - `scripts/install-quick-action.sh` — installs a `Take Notes` Quick Action into `~/Library/Services`.
 - `../docs/mac-engineering-overview.md` — implementation details and debugging guide.
 
@@ -84,6 +86,30 @@ If clicking does nothing:
 
 If you see `Operation not permitted` pointing to a script under `Documents`, run install again to refresh to the `Application Support` runtime path.
 
+### Optional: enable X posting from the note window
+
+If you want the `Also post to X` checkbox to work, make sure these are installed first:
+
+1. Google Chrome, Chromium, or Microsoft Edge.
+2. `bun`, or Node.js with `npx` available.
+3. Re-run `./mac/scripts/install-quick-action.sh` after pulling updates (it installs the bundled skill automatically).
+
+When the checkbox is selected:
+
+1. The note is still saved to Flomo first.
+2. A Chrome window opens to X compose with your note prefilled.
+3. You review the draft and click publish manually.
+
+The mac flow uses a dedicated browser profile here:
+
+`~/Library/Application Support/ScreenNotesMac/x-profile`
+
+The bundled X skill is installed here:
+
+`~/Library/Application Support/ScreenNotesMac/skills/baoyu-post-to-x`
+
+On the first run, log in to X in that browser window and keep the session for future drafts.
+
 For a non-interactive runtime smoke test that exercises the dialog construction path without opening a manual save flow or sending a test note to Flomo:
 
 ```bash
@@ -123,4 +149,16 @@ If you prefer manual setup:
 <preview document name or source app name>
 
 #Mac-Reading
+```
+
+## X draft format
+
+If `Also post to X` is checked, the draft content uses:
+
+```text
+<selected text>
+
+——————————
+
+<your note>
 ```

@@ -10,14 +10,16 @@ The mac tool is not a Preview plugin. It uses macOS Services:
 2. You click the Quick Action `Take Notes`.
 3. macOS runs a workflow at `~/Library/Services/Take Notes.workflow`.
 4. The workflow runs a shell script.
-5. The script opens a note dialog and sends content to Flomo.
+5. The script opens a note dialog, sends content to Flomo, and can optionally open an X draft.
 
 Key files:
 
 - `mac/scripts/install-quick-action.sh`: installs and refreshes the workflow.
-- `mac/scripts/take-notes-service.sh`: runtime behavior (UI + API call).
+- `mac/scripts/take-notes-service.sh`: runtime behavior (UI + Flomo API call + optional X draft).
 - `mac/scripts/configure-flomo-webhook.sh`: saves webhook config.
 - `~/Library/Application Support/ScreenNotesMac/config.json`: saved Flomo webhook.
+- `~/Library/Application Support/ScreenNotesMac/skills/baoyu-post-to-x`: bundled X skill runtime.
+- `~/Library/Application Support/ScreenNotesMac/x-profile`: dedicated Chrome profile for X drafts.
 - `~/Library/Logs/ScreenNotesMac/service.log`: runtime logs.
 
 ## 2) Why this design
@@ -34,7 +36,7 @@ When `Take Notes` runs:
 2. If stdin is empty, fallback to clipboard (`pbpaste`).
 3. Read webhook URL from config JSON.
 4. Ask Preview for the front document name when available; otherwise fall back to the current source app name.
-5. Show a multi-line note editor dialog (JXA + AppKit).
+5. Show a multi-line note editor dialog (JXA + AppKit), including an optional `Also post to X` checkbox.
 6. Build final note content:
    - selected text
    - separator
@@ -42,7 +44,8 @@ When `Take Notes` runs:
    - source document name or source app name
    - tag `#Mac-Reading`
 7. POST JSON to Flomo webhook.
-8. Write logs + post a success banner; use in-app dialogs for failures or setup issues.
+8. If selected, open an X compose draft in Chrome with the note text prefilled.
+9. Write logs + post a success banner; use in-app dialogs for failures or setup issues.
 
 ## 4) Important macOS concepts
 

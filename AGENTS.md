@@ -19,6 +19,7 @@ This file is for AI agents and automation tools working in this repo.
 - `mac/scripts/install-quick-action.sh`: installs/refreshes `Take Notes` workflow.
 - `mac/scripts/uninstall-quick-action.sh`: removes workflow and refreshes cache.
 - `mac/scripts/configure-flomo-webhook.sh`: writes webhook config.
+- `mac/skills/baoyu-post-to-x/`: bundled X posting skill used by mac runtime.
 - `mac/README.md`: mac setup + troubleshooting.
 
 ## macOS Runtime Notes
