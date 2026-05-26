@@ -23,5 +23,38 @@ json_escape() {
   printf '%s' "$value"
 }
 
-printf '{"webhookUrl":"%s"}\n' "$(json_escape "$WEBHOOK_URL")" >"$CONFIG_FILE"
-echo "Saved webhook config to $CONFIG_FILE"
+read_config_value() {
+  local path="$1"
+  plutil -extract "$path" raw -o - "$CONFIG_FILE" 2>/dev/null || true
+}
+
+EXISTING_GETBIJI_CLIENT_ID="$(read_config_value providerConfigs.getbiji.clientId)"
+if [[ -z "${EXISTING_GETBIJI_CLIENT_ID//[[:space:]]/}" ]]; then
+  EXISTING_GETBIJI_CLIENT_ID="$(read_config_value providerConfig.clientId)"
+fi
+
+EXISTING_GETBIJI_API_KEY="$(read_config_value providerConfigs.getbiji.apiKey)"
+if [[ -z "${EXISTING_GETBIJI_API_KEY//[[:space:]]/}" ]]; then
+  EXISTING_GETBIJI_API_KEY="$(read_config_value providerConfig.apiKey)"
+fi
+
+EXISTING_GETBIJI_TAGS="$(read_config_value providerConfigs.getbiji.defaultTags)"
+if [[ -z "${EXISTING_GETBIJI_TAGS//[[:space:]]/}" ]]; then
+  EXISTING_GETBIJI_TAGS="$(read_config_value providerConfig.defaultTags)"
+fi
+
+{
+  printf '{"providerId":"flomo","providerConfigs":{'
+  printf '"flomo":{"webhookUrl":"%s"}' "$(json_escape "$WEBHOOK_URL")"
+
+  if [[ -n "${EXISTING_GETBIJI_CLIENT_ID//[[:space:]]/}" && -n "${EXISTING_GETBIJI_API_KEY//[[:space:]]/}" ]]; then
+    printf ',"getbiji":{"clientId":"%s","apiKey":"%s","defaultTags":"%s"}' \
+      "$(json_escape "$EXISTING_GETBIJI_CLIENT_ID")" \
+      "$(json_escape "$EXISTING_GETBIJI_API_KEY")" \
+      "$(json_escape "$EXISTING_GETBIJI_TAGS")"
+  fi
+
+  printf '}}\n'
+} >"$CONFIG_FILE"
+
+echo "Saved Flomo config to $CONFIG_FILE"

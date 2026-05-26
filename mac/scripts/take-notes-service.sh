@@ -18,6 +18,18 @@ mkdir -p "$LOG_DIR"
 
 X_POST_ERROR=""
 X_RUNTIME=()
+ACTIVE_PROVIDER_ID=""
+PROVIDER_ID=""
+PROVIDER_NAME=""
+PROVIDER_WEBHOOK_URL=""
+PROVIDER_CLIENT_ID=""
+PROVIDER_API_KEY=""
+PROVIDER_DEFAULT_TAGS=""
+FLOMO_WEBHOOK_URL=""
+GETBIJI_CLIENT_ID=""
+GETBIJI_API_KEY=""
+GETBIJI_DEFAULT_TAGS=""
+AVAILABLE_PROVIDER_IDS=()
 
 find_runtime_bin() {
   local name="$1"
@@ -112,6 +124,15 @@ function run(argv) {
 JXA
 }
 
+extract_composer_provider_id() {
+  /usr/bin/osascript -l JavaScript - "$1" <<'JXA'
+function run(argv) {
+  const payload = JSON.parse(argv[0] || "{}");
+  return typeof payload.providerId === "string" ? payload.providerId : "";
+}
+JXA
+}
+
 build_x_post_content() {
   local selected_text="$1"
   local note_text="$2"
@@ -119,6 +140,239 @@ build_x_post_content() {
   printf '%s' "$selected_text"
   printf '\n\n%s\n\n' "——————————"
   printf '%s' "$note_text"
+}
+
+json_stringify() {
+  /usr/bin/osascript -l JavaScript -e 'function run(argv){ return JSON.stringify(argv[0] || ""); }' "${1-}"
+}
+
+json_stringify_tag_list() {
+  /usr/bin/osascript -l JavaScript -e 'function run(argv){ const tags = (argv[0] || "").split(",").map((tag) => tag.trim()).filter(Boolean); return JSON.stringify(tags); }' "${1-}"
+}
+
+json_escape() {
+  local value="$1"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  printf '%s' "$value"
+}
+
+read_config_value() {
+  local path="$1"
+  plutil -extract "$path" raw -o - "$CONFIG_FILE" 2>/dev/null || true
+}
+
+build_note_content() {
+  local selected_text="$1"
+  local note_text="$2"
+  local source_name="$3"
+
+  printf '%s\n\n%s\n\n%s\n\n%s\n\n%s' \
+    "$selected_text" \
+    "——————————" \
+    "$note_text" \
+    "$source_name" \
+    "#Mac-Reading"
+}
+
+build_note_title() {
+  local candidate
+  local normalized
+
+  for candidate in "$1" "$2" "$3"; do
+    normalized="$(printf '%s' "$candidate" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')"
+    if [[ -n "${normalized//[[:space:]]/}" ]]; then
+      printf '%s' "$normalized" | cut -c1-80
+      return 0
+    fi
+  done
+
+  printf 'Mac Note'
+}
+
+provider_name_for_id() {
+  case "$1" in
+    flomo)
+      printf 'Flomo'
+      ;;
+    getbiji)
+      printf 'Get笔记'
+      ;;
+    *)
+      printf '%s' "$1"
+      ;;
+  esac
+}
+
+write_provider_config_file() {
+  local active_provider_id="$1"
+
+  mkdir -p "$APP_SUPPORT_DIR"
+
+  {
+    printf '{"providerId":"%s","providerConfigs":{' "$(json_escape "$active_provider_id")"
+
+    local wrote_provider=""
+    if [[ -n "${FLOMO_WEBHOOK_URL//[[:space:]]/}" ]]; then
+      printf '"flomo":{"webhookUrl":"%s"}' "$(json_escape "$FLOMO_WEBHOOK_URL")"
+      wrote_provider="1"
+    fi
+
+    if [[ -n "${GETBIJI_CLIENT_ID//[[:space:]]/}" && -n "${GETBIJI_API_KEY//[[:space:]]/}" ]]; then
+      if [[ -n "$wrote_provider" ]]; then
+        printf ','
+      fi
+      printf '"getbiji":{"clientId":"%s","apiKey":"%s","defaultTags":"%s"}' \
+        "$(json_escape "$GETBIJI_CLIENT_ID")" \
+        "$(json_escape "$GETBIJI_API_KEY")" \
+        "$(json_escape "$GETBIJI_DEFAULT_TAGS")"
+    fi
+
+    printf '}}\n'
+  } >"$CONFIG_FILE"
+}
+
+apply_provider_selection() {
+  local selected_provider_id="$1"
+
+  case "$selected_provider_id" in
+    flomo)
+      if [[ -z "${FLOMO_WEBHOOK_URL//[[:space:]]/}" ]]; then
+        return 1
+      fi
+
+      PROVIDER_ID="flomo"
+      PROVIDER_NAME="Flomo"
+      PROVIDER_WEBHOOK_URL="$FLOMO_WEBHOOK_URL"
+      PROVIDER_CLIENT_ID=""
+      PROVIDER_API_KEY=""
+      PROVIDER_DEFAULT_TAGS=""
+      return 0
+      ;;
+    getbiji)
+      if [[ -z "${GETBIJI_CLIENT_ID//[[:space:]]/}" || -z "${GETBIJI_API_KEY//[[:space:]]/}" ]]; then
+        return 1
+      fi
+
+      PROVIDER_ID="getbiji"
+      PROVIDER_NAME="Get笔记"
+      PROVIDER_WEBHOOK_URL=""
+      PROVIDER_CLIENT_ID="$GETBIJI_CLIENT_ID"
+      PROVIDER_API_KEY="$GETBIJI_API_KEY"
+      PROVIDER_DEFAULT_TAGS="$GETBIJI_DEFAULT_TAGS"
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+load_provider_config() {
+  local configured_provider_id
+  local legacy_webhook_url
+
+  ACTIVE_PROVIDER_ID=""
+  PROVIDER_ID=""
+  PROVIDER_NAME=""
+  PROVIDER_WEBHOOK_URL=""
+  PROVIDER_CLIENT_ID=""
+  PROVIDER_API_KEY=""
+  PROVIDER_DEFAULT_TAGS=""
+  FLOMO_WEBHOOK_URL=""
+  GETBIJI_CLIENT_ID=""
+  GETBIJI_API_KEY=""
+  GETBIJI_DEFAULT_TAGS=""
+  AVAILABLE_PROVIDER_IDS=()
+
+  if [[ ! -f "$CONFIG_FILE" ]]; then
+    return 1
+  fi
+
+  configured_provider_id="$(read_config_value providerId)"
+  FLOMO_WEBHOOK_URL="$(read_config_value providerConfigs.flomo.webhookUrl)"
+  if [[ -z "${FLOMO_WEBHOOK_URL//[[:space:]]/}" ]]; then
+    legacy_webhook_url="$(read_config_value webhookUrl)"
+    if [[ -n "${legacy_webhook_url//[[:space:]]/}" ]]; then
+      FLOMO_WEBHOOK_URL="$legacy_webhook_url"
+    elif [[ "$configured_provider_id" == "flomo" ]]; then
+      FLOMO_WEBHOOK_URL="$(read_config_value providerConfig.webhookUrl)"
+    fi
+  fi
+
+  GETBIJI_CLIENT_ID="$(read_config_value providerConfigs.getbiji.clientId)"
+  GETBIJI_API_KEY="$(read_config_value providerConfigs.getbiji.apiKey)"
+  GETBIJI_DEFAULT_TAGS="$(read_config_value providerConfigs.getbiji.defaultTags)"
+  if [[ -z "${GETBIJI_CLIENT_ID//[[:space:]]/}" && "$configured_provider_id" == "getbiji" ]]; then
+    GETBIJI_CLIENT_ID="$(read_config_value providerConfig.clientId)"
+    GETBIJI_API_KEY="$(read_config_value providerConfig.apiKey)"
+    GETBIJI_DEFAULT_TAGS="$(read_config_value providerConfig.defaultTags)"
+  fi
+
+  if [[ -n "${FLOMO_WEBHOOK_URL//[[:space:]]/}" ]]; then
+    AVAILABLE_PROVIDER_IDS+=("flomo")
+  fi
+
+  if [[ -n "${GETBIJI_CLIENT_ID//[[:space:]]/}" && -n "${GETBIJI_API_KEY//[[:space:]]/}" ]]; then
+    AVAILABLE_PROVIDER_IDS+=("getbiji")
+  fi
+
+  if (( ${#AVAILABLE_PROVIDER_IDS[@]} == 0 )); then
+    return 1
+  fi
+
+  ACTIVE_PROVIDER_ID="$configured_provider_id"
+  if ! apply_provider_selection "$ACTIVE_PROVIDER_ID"; then
+    ACTIVE_PROVIDER_ID="${AVAILABLE_PROVIDER_IDS[0]}"
+    apply_provider_selection "$ACTIVE_PROVIDER_ID" || return 1
+  fi
+
+  return 0
+}
+
+send_note_to_provider() {
+  local content="$1"
+  local title="$2"
+  local resp_file="$3"
+  local content_json
+  local payload
+  local tags_json
+  local title_json
+
+  case "$PROVIDER_ID" in
+    flomo)
+      content_json="$(json_stringify "$content")"
+      payload="{\"content\":$content_json}"
+
+      /usr/bin/curl -sS -o "$resp_file" -w "%{http_code}" \
+        -X POST \
+        -H "Content-Type: application/json" \
+        --data "$payload" \
+        "$PROVIDER_WEBHOOK_URL" \
+        2>>"$LOG_FILE" || true
+      ;;
+    getbiji)
+      title_json="$(json_stringify "$title")"
+      content_json="$(json_stringify "$content")"
+      tags_json="$(json_stringify_tag_list "$PROVIDER_DEFAULT_TAGS")"
+      payload="{\"title\":$title_json,\"content\":$content_json}"
+      if [[ "$tags_json" != "[]" ]]; then
+        payload="{\"title\":$title_json,\"content\":$content_json,\"tags\":$tags_json}"
+      fi
+
+      /usr/bin/curl -sS -o "$resp_file" -w "%{http_code}" \
+        -X POST \
+        -H "X-Client-ID: $PROVIDER_CLIENT_ID" \
+        -H "Authorization: $PROVIDER_API_KEY" \
+        -H "Content-Type: application/json" \
+        --data "$payload" \
+        "https://openapi.biji.com/open/api/v1/resource/note/save" \
+        2>>"$LOG_FILE" || true
+      ;;
+    *)
+      printf '000'
+      ;;
+  esac
 }
 
 ensure_x_skill_dependencies() {
@@ -240,14 +494,22 @@ JXA
 }
 
 prompt_note_multiline() {
-  /usr/bin/osascript -l JavaScript - "$1" "${2:-}" <<'JXA'
+  /usr/bin/osascript -l JavaScript - "$1" "${2:-}" "${3:-}" "${4:-}" <<'JXA'
 ObjC.import("AppKit");
 
 function run(argv) {
   const snippet = (argv.length > 0 && argv[0]) ? argv[0] : "";
   const mode = (argv.length > 1 && argv[1]) ? argv[1] : "";
+  const activeProviderId = (argv.length > 2 && argv[2]) ? argv[2] : "flomo";
+  const availableProviderIds = (argv.length > 3 && argv[3])
+    ? argv[3].split(",").filter(Boolean)
+    : [activeProviderId];
   const isSmokeTest = mode === "__SCREEN_NOTES_SMOKE_TEST__";
   const isSavePathTest = mode === "__SCREEN_NOTES_SAVE_PATH_TEST__";
+  const providerNames = {
+    flomo: "Flomo",
+    getbiji: "Get笔记"
+  };
   const currentApp = Application.currentApplication();
   currentApp.includeStandardAdditions = true;
   currentApp.activate();
@@ -283,6 +545,9 @@ function run(argv) {
   const innerW = W - 2 * pad;
   const subtitleH = 34;
   const helperH = 16;
+  const providerLabelH = 16;
+  const providerPickerH = 28;
+  const providerBlockH = providerLabelH + 6 + providerPickerH;
   const checkboxH = 22;
   const btnH = 32;
   const editorH = 150;
@@ -302,7 +567,7 @@ function run(argv) {
   // Layout (bottom-up)
   const botPad = 16;
   const topPad = 18;
-  const totalH = botPad + btnH + 12 + helperH + 10 + checkboxH + sectionGap + editorH + sectionGap + prevH + sectionGap + subtitleH + topPad;
+  const totalH = botPad + btnH + 12 + helperH + 10 + providerBlockH + 10 + checkboxH + sectionGap + editorH + sectionGap + prevH + sectionGap + subtitleH + topPad;
 
   const panel = $.NSPanel.alloc.initWithContentRectStyleMaskBackingDefer(
     $.NSMakeRect(0, 0, W, totalH),
@@ -361,7 +626,7 @@ function run(argv) {
   const helperText = $.NSTextField.alloc.initWithFrame(
     $.NSMakeRect(pad, y, innerW, helperH)
   );
-  helperText.setStringValue($("Selected text and #Mac-Reading are added automatically in Flomo."));
+  helperText.setStringValue($("Selected text and #Mac-Reading are added automatically."));
   helperText.setBezeled(false);
   helperText.setDrawsBackground(false);
   helperText.setEditable(false);
@@ -370,6 +635,33 @@ function run(argv) {
   helperText.setTextColor($.NSColor.secondaryLabelColor);
   cv.addSubview(helperText);
   y += helperH + 10;
+
+  // -- Provider picker --
+  const providerPicker = $.NSPopUpButton.alloc.initWithFramePullsDown(
+    $.NSMakeRect(pad, y, innerW, providerPickerH),
+    false
+  );
+  availableProviderIds.forEach(function(providerId) {
+    providerPicker.addItemWithTitle($(providerNames[providerId] || providerId));
+  });
+
+  const activeProviderIndex = Math.max(0, availableProviderIds.indexOf(activeProviderId));
+  providerPicker.selectItemAtIndex(activeProviderIndex);
+  providerPicker.setEnabled(availableProviderIds.length > 1);
+  cv.addSubview(providerPicker);
+
+  const providerLabel = $.NSTextField.alloc.initWithFrame(
+    $.NSMakeRect(pad, y + providerPickerH + 6, innerW, providerLabelH)
+  );
+  providerLabel.setStringValue($(availableProviderIds.length > 1 ? "Send note to" : "Configured note provider"));
+  providerLabel.setBezeled(false);
+  providerLabel.setDrawsBackground(false);
+  providerLabel.setEditable(false);
+  providerLabel.setSelectable(false);
+  providerLabel.setFont($.NSFont.systemFontOfSize(12));
+  providerLabel.setTextColor($.NSColor.secondaryLabelColor);
+  cv.addSubview(providerLabel);
+  y += providerBlockH + 10;
 
   // -- X toggle --
   const postToXCheckbox = $.NSButton.alloc.initWithFrame(
@@ -499,9 +791,15 @@ function run(argv) {
     return "__SCREEN_NOTES_CANCELLED__";
   }
 
+  const selectedProviderName = ObjC.unwrap(providerPicker.titleOfSelectedItem) || "";
+  const selectedProviderId = availableProviderIds.find(function(providerId) {
+    return (providerNames[providerId] || providerId) === selectedProviderName;
+  }) || activeProviderId;
+
   return JSON.stringify({
     note: ObjC.unwrap(textView.string),
-    postToX: Number(postToXCheckbox.state) === 1
+    postToX: Number(postToXCheckbox.state) === 1,
+    providerId: selectedProviderId
   });
 }
 JXA
@@ -522,21 +820,22 @@ if [[ -z "${SELECTED_TEXT//[[:space:]]/}" ]]; then
 fi
 
 if [[ -z "${SELECTED_TEXT//[[:space:]]/}" ]]; then
-  show_feedback "error" "No selected text received from Preview."
+  show_feedback "error" "No selected text received."
   log_line "Empty selection input."
   exit 0
 fi
 
-WEBHOOK_URL=""
 if [[ "$TEST_MODE" != "smoke" ]]; then
-  WEBHOOK_URL="$(plutil -extract webhookUrl raw -o - "$CONFIG_FILE" 2>/dev/null || true)"
-  if [[ -z "${WEBHOOK_URL//[[:space:]]/}" ]]; then
-    show_feedback "error" "Please configure Flomo webhook first."
-    log_line "Missing webhook config."
+  if ! load_provider_config; then
+    show_feedback "error" "Please configure a note provider first." "Use ./mac/scripts/configure-flomo-webhook.sh for Flomo or ./mac/scripts/configure-getbiji.sh for Get笔记."
+    log_line "Missing or invalid provider config."
     exit 1
   fi
 else
   log_line "Smoke test mode enabled."
+  ACTIVE_PROVIDER_ID="flomo"
+  AVAILABLE_PROVIDER_IDS=("flomo")
+  PROVIDER_NAME="note provider"
 fi
 
 PREVIEW_TEXT="$(printf "%s" "$SELECTED_TEXT" | head -c 500)"
@@ -555,7 +854,8 @@ elif [[ "$TEST_MODE" == "save-path" ]]; then
   PROMPT_MODE="__SCREEN_NOTES_SAVE_PATH_TEST__"
 fi
 
-COMPOSER_RESULT="$(prompt_note_multiline "$PREVIEW_TEXT" "$PROMPT_MODE")"
+AVAILABLE_PROVIDER_IDS_CSV="$(IFS=,; printf '%s' "${AVAILABLE_PROVIDER_IDS[*]}")"
+COMPOSER_RESULT="$(prompt_note_multiline "$PREVIEW_TEXT" "$PROMPT_MODE" "$ACTIVE_PROVIDER_ID" "$AVAILABLE_PROVIDER_IDS_CSV")"
 
 if [[ "$COMPOSER_RESULT" == "__SCREEN_NOTES_CANCELLED__" ]]; then
   log_line "User cancelled note dialog."
@@ -574,32 +874,31 @@ fi
 
 NOTE_TEXT="$(extract_composer_note "$COMPOSER_RESULT")"
 POST_TO_X="$(extract_composer_post_flag "$COMPOSER_RESULT")"
+SELECTED_PROVIDER_ID="$(extract_composer_provider_id "$COMPOSER_RESULT")"
 
-CONTENT="$SELECTED_TEXT
+if [[ -z "${SELECTED_PROVIDER_ID//[[:space:]]/}" ]]; then
+  SELECTED_PROVIDER_ID="$ACTIVE_PROVIDER_ID"
+fi
 
-——————————
+if ! apply_provider_selection "$SELECTED_PROVIDER_ID"; then
+  show_feedback "error" "The selected provider is not configured." "Configure it first, then try saving again."
+  log_line "Selected provider missing config: $SELECTED_PROVIDER_ID"
+  exit 1
+fi
 
-$NOTE_TEXT
+ACTIVE_PROVIDER_ID="$SELECTED_PROVIDER_ID"
+if [[ "$TEST_MODE" != "smoke" ]]; then
+  write_provider_config_file "$ACTIVE_PROVIDER_ID"
+fi
 
-$SOURCE_NAME
-
-#Mac-Reading"
-
-CONTENT_JSON=$(/usr/bin/osascript -l JavaScript -e 'function run(argv){ return JSON.stringify(argv[0]); }' "$CONTENT")
-PAYLOAD="{\"content\":$CONTENT_JSON}"
+CONTENT="$(build_note_content "$SELECTED_TEXT" "$NOTE_TEXT" "$SOURCE_NAME")"
+TITLE="$(build_note_title "$SOURCE_NAME" "$NOTE_TEXT" "$SELECTED_TEXT")"
 
 RESP_FILE="$(mktemp "${TMPDIR:-/tmp}/screen-notes-response.XXXXXX.txt")"
-HTTP_CODE="$(
-  /usr/bin/curl -sS -o "$RESP_FILE" -w "%{http_code}" \
-    -X POST \
-    -H "Content-Type: application/json" \
-    --data "$PAYLOAD" \
-    "$WEBHOOK_URL" \
-    2>>"$LOG_FILE" || true
-)"
+HTTP_CODE="$(send_note_to_provider "$CONTENT" "$TITLE" "$RESP_FILE")"
 
 if [[ ! "$HTTP_CODE" =~ ^2[0-9][0-9]$ ]]; then
-  log_line "Flomo request failed. HTTP=$HTTP_CODE Body=$(cat "$RESP_FILE")"
+  log_line "$PROVIDER_NAME request failed. HTTP=$HTTP_CODE Body=$(cat "$RESP_FILE")"
   ERROR_DETAIL="HTTP status: $HTTP_CODE"
   if [[ -s "$RESP_FILE" ]]; then
     ERROR_BODY="$(tr '\n' ' ' < "$RESP_FILE" | head -c 220)"
@@ -608,12 +907,12 @@ if [[ ! "$HTTP_CODE" =~ ^2[0-9][0-9]$ ]]; then
 $ERROR_BODY"
   fi
   rm -f "$RESP_FILE"
-  show_feedback "error" "Failed to save to Flomo." "$ERROR_DETAIL"
+  show_feedback "error" "Failed to save to $PROVIDER_NAME." "$ERROR_DETAIL"
   exit 1
 fi
 
 rm -f "$RESP_FILE"
-log_line "Completed successfully."
+log_line "Completed successfully. Provider=$PROVIDER_ID"
 
 if [[ "$POST_TO_X" == "1" ]]; then
   X_POST_TEXT="$(build_x_post_content "$SELECTED_TEXT" "$NOTE_TEXT")"
@@ -621,13 +920,13 @@ if [[ "$POST_TO_X" == "1" ]]; then
 
   if open_x_compose "$X_POST_TEXT"; then
     log_line "X compose opened successfully."
-    notify_banner "Saved to Flomo and opened X draft."
+    notify_banner "Saved to $PROVIDER_NAME and opened X draft."
     exit 0
   fi
 
   log_line "X compose failed: $X_POST_ERROR"
-  notify_banner "Saved to Flomo. X draft failed to open."
+  notify_banner "Saved to $PROVIDER_NAME. X draft failed to open."
   exit 0
 fi
 
-notify_banner "Saved to Flomo."
+notify_banner "Saved to $PROVIDER_NAME."

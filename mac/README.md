@@ -1,4 +1,4 @@
-# Screen Notes for macOS (Quick Actions + Flomo + X)
+# Screen Notes for macOS (Quick Actions + Flomo/Get笔记 + X)
 
 This directory adds a macOS-native note flow for selected text in apps that expose macOS Quick Actions / Services:
 
@@ -6,7 +6,7 @@ This directory adds a macOS-native note flow for selected text in apps that expo
 2. Trigger a Quick Action named `Take Notes`.
 3. A multi-line macOS note dialog appears with the selected text preview.
 4. Optionally check `Also post to X` to open an X draft after saving.
-5. Save sends the note to Flomo webhook API.
+5. Save sends the note to your configured provider.
 6. If `Also post to X` is checked, the tool opens a Chrome compose window with your note prefilled for manual review and publishing.
 7. After save, the tool posts a Notification Center banner for success and shows an in-app dialog for errors or setup issues.
 
@@ -20,14 +20,15 @@ This directory adds a macOS-native note flow for selected text in apps that expo
 
 ## What's included
 
-- `scripts/configure-flomo-webhook.sh` — one-time webhook configuration.
-- `scripts/take-notes-service.sh` — workflow runner: prompt note dialog + post to Flomo, optionally open X draft.
+- `scripts/configure-flomo-webhook.sh` — one-time Flomo configuration.
+- `scripts/configure-getbiji.sh` — one-time Get笔记 configuration.
+- `scripts/take-notes-service.sh` — workflow runner: prompt note dialog + post to the configured provider, optionally open X draft.
 - `scripts/install-quick-action.sh` — installs a `Take Notes` Quick Action into `~/Library/Services`.
 - `../docs/mac-engineering-overview.md` — implementation details and debugging guide.
 
 ## One-time setup
 
-### 1) Configure your Flomo webhook
+### 1) Configure your note provider
 
 From project root:
 
@@ -35,9 +36,17 @@ From project root:
 ./mac/scripts/configure-flomo-webhook.sh "https://flomoapp.com/iwh/xxxxx/yyyyy/"
 ```
 
+Or configure Get笔记:
+
+```bash
+./mac/scripts/configure-getbiji.sh "cli_xxx" "gk_live_xxx" "工作,重要"
+```
+
 It stores config at:
 
 `~/Library/Application Support/ScreenNotesMac/config.json`
+
+The credentials are configured at runtime and are not stored in the source code.
 
 ### 2) Install the Quick Action automatically
 
@@ -96,7 +105,7 @@ If you want the `Also post to X` checkbox to work, make sure these are installed
 
 When the checkbox is selected:
 
-1. The note is still saved to Flomo first.
+1. The note is still saved to your configured provider first.
 2. A Chrome window opens to X compose with your note prefilled.
 3. You review the draft and click publish manually.
 
@@ -110,7 +119,7 @@ The bundled X skill is installed here:
 
 On the first run, log in to X in that browser window and keep the session for future drafts.
 
-For a non-interactive runtime smoke test that exercises the dialog construction path without opening a manual save flow or sending a test note to Flomo:
+For a non-interactive runtime smoke test that exercises the dialog construction path without opening a manual save flow or sending a test note to a provider:
 
 ```bash
 SCREEN_NOTES_TEST_MODE=smoke "$HOME/Library/Application Support/ScreenNotesMac/take-notes-service.sh" <<< "test text"
@@ -137,7 +146,7 @@ If you prefer manual setup:
 
 7. Save as: `Take Notes`.
 
-## Note format sent to Flomo
+## Note content sent to providers
 
 ```text
 <selected text>
@@ -150,6 +159,11 @@ If you prefer manual setup:
 
 #Mac-Reading
 ```
+
+When Get笔记 is configured, the mac tool also sends:
+
+- a generated title based on the source name, note text, or selected text
+- optional tags from `configure-getbiji.sh`
 
 ## X draft format
 

@@ -1,6 +1,12 @@
 // ——— Populate provider dropdown ———
 const providerSelect = document.getElementById("provider-select");
 const configContainer = document.getElementById("provider-config");
+const providerHelp = document.getElementById("provider-help");
+const activeProviderMessage = document.getElementById("active-provider-msg");
+const saveButton = document.getElementById("btn-save");
+
+let providerConfigs = {};
+let activeProviderId = DEFAULT_PROVIDER;
 
 for (const p of getProviderList()) {
   const opt = document.createElement("option");
@@ -42,20 +48,42 @@ function renderConfigFields(providerId, savedConfig) {
   }
 }
 
+function updateProviderUi(selectedProviderId) {
+  const selectedProvider = getProvider(selectedProviderId);
+  const activeProvider = getProvider(activeProviderId);
+
+  providerHelp.textContent = selectedProvider
+    ? "Credentials are stored per provider. Saving here updates this provider and makes it the active note destination."
+    : "";
+
+  activeProviderMessage.textContent = activeProvider
+    ? "Current active provider: " + activeProvider.name
+    : "";
+
+  saveButton.textContent = selectedProvider
+    ? "Save Credentials and Use " + selectedProvider.name
+    : "Save";
+}
+
 // ——— Load saved settings ———
 async function loadSettings() {
-  const { providerId, providerConfig } = await QuickNotesStorage.getSettings();
+  const { providerId, providerConfigs: savedProviderConfigs } = await QuickNotesStorage.getSettings();
+  providerConfigs = savedProviderConfigs || {};
+  activeProviderId = providerId;
   providerSelect.value = providerId;
-  renderConfigFields(providerId, providerConfig);
+  renderConfigFields(providerId, providerConfigs[providerId] || {});
+  updateProviderUi(providerId);
 }
 
 // Re-render fields when provider changes
 providerSelect.addEventListener("change", () => {
-  renderConfigFields(providerSelect.value, {});
+  const providerId = providerSelect.value;
+  renderConfigFields(providerId, providerConfigs[providerId] || {});
+  updateProviderUi(providerId);
 });
 
 // ——— Save ———
-document.getElementById("btn-save").addEventListener("click", async () => {
+saveButton.addEventListener("click", async () => {
   const providerId = providerSelect.value;
   const provider = getProvider(providerId);
   if (!provider) {
@@ -75,8 +103,16 @@ document.getElementById("btn-save").addEventListener("click", async () => {
     return;
   }
 
-  await QuickNotesStorage.saveSettings(providerId, config);
-  showStatus("Saved ✓", false);
+  providerConfigs = {
+    ...providerConfigs,
+    [providerId]: config
+  };
+  activeProviderId = providerId;
+
+  await QuickNotesStorage.saveSettings(providerId, config, providerConfigs);
+  renderConfigFields(providerId, config);
+  updateProviderUi(providerId);
+  showStatus("Saved credentials and set " + provider.name + " as active provider ✓", false);
 });
 
 function showStatus(msg, isError) {

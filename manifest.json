@@ -10,7 +10,8 @@
     "storage"
   ],
   "host_permissions": [
-    "https://flomoapp.com/*"
+    "https://flomoapp.com/*",
+    "https://openapi.biji.com/*"
   ],
   "background": {
     "service_worker": "background.js"

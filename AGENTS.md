@@ -5,7 +5,7 @@ This file is for AI agents and automation tools working in this repo.
 ## Scope
 
 - Main product: Chrome extension for quick notes from selected web text.
-- macOS companion: `mac/` folder provides Preview Quick Action integration and Flomo sending.
+- macOS companion: `mac/` folder provides Preview Quick Action integration and provider-based note sending.
 
 ## Key Paths
 
@@ -13,12 +13,13 @@ This file is for AI agents and automation tools working in this repo.
 - `background.js`: context menu + orchestration.
 - `content.js`: in-page note bubble UI.
 - `note-service.js`: provider-agnostic save flow.
-- `providers.js`: note provider registry (Flomo currently).
+- `providers.js`: note provider registry (Flomo and Get笔记 currently).
 - `storage.js`: extension settings/history storage.
 - `mac/scripts/take-notes-service.sh`: runtime script used by macOS Quick Action.
 - `mac/scripts/install-quick-action.sh`: installs/refreshes `Take Notes` workflow.
 - `mac/scripts/uninstall-quick-action.sh`: removes workflow and refreshes cache.
-- `mac/scripts/configure-flomo-webhook.sh`: writes webhook config.
+- `mac/scripts/configure-flomo-webhook.sh`: writes Flomo config.
+- `mac/scripts/configure-getbiji.sh`: writes Get笔记 config.
 - `mac/skills/baoyu-post-to-x/`: bundled X posting skill used by mac runtime.
 - `mac/README.md`: mac setup + troubleshooting.
 
@@ -40,12 +41,14 @@ This file is for AI agents and automation tools working in this repo.
   - `bash -n mac/scripts/install-quick-action.sh`
   - `bash -n mac/scripts/uninstall-quick-action.sh`
   - `bash -n mac/scripts/configure-flomo-webhook.sh`
+  - `bash -n mac/scripts/configure-getbiji.sh`
   - `bash -n mac/scripts/take-notes-service.sh`
 
 ## mac Workflow Smoke Test
 
-1. Configure webhook:
-   - `./mac/scripts/configure-flomo-webhook.sh "<flomo-webhook-url>"`
+1. Configure provider:
+  - `./mac/scripts/configure-flomo-webhook.sh "<flomo-webhook-url>"`
+  - or `./mac/scripts/configure-getbiji.sh "<client-id>" "<api-key>" "<tags>"`
 2. Install service:
    - `./mac/scripts/install-quick-action.sh`
 3. CLI test of workflow:

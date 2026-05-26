@@ -79,7 +79,7 @@ label {
   margin-bottom: 14px;
 }
 
-textarea, input[type="url"] {
+textarea, input[type="url"], input[type="text"], input[type="password"] {
   width: 100%;
   padding: 8px 10px;
   border: 1px solid #ccc;
@@ -88,7 +88,7 @@ textarea, input[type="url"] {
   font-size: 14px;
   resize: vertical;
 }
-textarea:focus, input[type="url"]:focus {
+textarea:focus, input[type="url"]:focus, input[type="text"]:focus, input[type="password"]:focus {
   outline: none;
   border-color: #4f8ff7;
   box-shadow: 0 0 0 2px rgba(79, 143, 247, 0.2);
@@ -297,4 +297,19 @@ blockquote {
 
 .options-container h2 {
   margin-bottom: 24px;
+}
+
+.settings-copy {
+  margin-top: 8px;
+}
+
+.active-provider-msg {
+  display: inline-flex;
+  margin-bottom: 16px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #2756a3;
+  font-size: 12px;
+  font-weight: 500;
 }

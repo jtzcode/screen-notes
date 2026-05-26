@@ -24,13 +24,21 @@ const QuickNotesNoteService = {
     }
 
     const { provider, config } = await this.getConfiguredProvider();
-    const content = provider.buildContent(
-      pendingSelection.selectedText,
+    const noteInput = {
+      selectedText: pendingSelection.selectedText,
       userNote,
-      pendingSelection.pageUrl
-    );
+      pageUrl: pendingSelection.pageUrl,
+      pageTitle: pendingSelection.pageTitle
+    };
+    const payload = typeof provider.buildPayload === "function"
+      ? provider.buildPayload(noteInput, config)
+      : provider.buildContent(
+          noteInput.selectedText,
+          noteInput.userNote,
+          noteInput.pageUrl
+        );
 
-    await provider.send(config, content);
+    await provider.send(config, payload);
 
     const note = QuickNotesStorage.normalizeNote({
       selectedText: pendingSelection.selectedText,

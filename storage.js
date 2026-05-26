@@ -1,6 +1,7 @@
 const QUICK_NOTES_STORAGE_KEYS = {
   provider: "provider",
   providerConfig: "providerConfig",
+  providerConfigs: "providerConfigs",
   legacyFlomoWebhookUrl: "flomoWebhookUrl",
   notes: "notes",
   fallbackPendingNote: "pendingNote"
@@ -14,26 +15,56 @@ const QuickNotesStorage = {
     const data = await chrome.storage.sync.get([
       QUICK_NOTES_STORAGE_KEYS.provider,
       QUICK_NOTES_STORAGE_KEYS.providerConfig,
+      QUICK_NOTES_STORAGE_KEYS.providerConfigs,
       QUICK_NOTES_STORAGE_KEYS.legacyFlomoWebhookUrl
     ]);
 
     let providerId = data[QUICK_NOTES_STORAGE_KEYS.provider] || this.getDefaultProviderId();
-    let providerConfig = data[QUICK_NOTES_STORAGE_KEYS.providerConfig] || {};
+    let providerConfigs = data[QUICK_NOTES_STORAGE_KEYS.providerConfigs] || {};
+    let shouldPersist = false;
+
+    if (!providerConfigs || typeof providerConfigs !== "object" || Array.isArray(providerConfigs)) {
+      providerConfigs = {};
+      shouldPersist = true;
+    }
+
+    const legacyProviderConfig = data[QUICK_NOTES_STORAGE_KEYS.providerConfig];
+    if (
+      Object.keys(providerConfigs).length === 0
+      && legacyProviderConfig
+      && typeof legacyProviderConfig === "object"
+      && !Array.isArray(legacyProviderConfig)
+    ) {
+      providerConfigs[providerId] = legacyProviderConfig;
+      shouldPersist = true;
+    }
 
     if (!data[QUICK_NOTES_STORAGE_KEYS.provider] && data[QUICK_NOTES_STORAGE_KEYS.legacyFlomoWebhookUrl]) {
       providerId = this.getDefaultProviderId();
-      providerConfig = { webhookUrl: data[QUICK_NOTES_STORAGE_KEYS.legacyFlomoWebhookUrl] };
-      await this.saveSettings(providerId, providerConfig);
+      providerConfigs.flomo = { webhookUrl: data[QUICK_NOTES_STORAGE_KEYS.legacyFlomoWebhookUrl] };
+      shouldPersist = true;
+    }
+
+    const providerConfig = providerConfigs[providerId] || {};
+
+    if (shouldPersist) {
+      await this.saveSettings(providerId, providerConfig, providerConfigs);
       await chrome.storage.sync.remove(QUICK_NOTES_STORAGE_KEYS.legacyFlomoWebhookUrl);
     }
 
-    return { providerId, providerConfig };
+    return { providerId, providerConfig, providerConfigs };
   },
 
-  async saveSettings(providerId, providerConfig) {
+  async saveSettings(providerId, providerConfig, providerConfigs) {
+    const mergedConfigs = {
+      ...(providerConfigs || {}),
+      [providerId]: providerConfig
+    };
+
     await chrome.storage.sync.set({
       [QUICK_NOTES_STORAGE_KEYS.provider]: providerId,
-      [QUICK_NOTES_STORAGE_KEYS.providerConfig]: providerConfig
+      [QUICK_NOTES_STORAGE_KEYS.providerConfig]: providerConfig,
+      [QUICK_NOTES_STORAGE_KEYS.providerConfigs]: mergedConfigs
     });
   },
 

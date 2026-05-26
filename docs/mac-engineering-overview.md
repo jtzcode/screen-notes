@@ -10,14 +10,15 @@ The mac tool is not a Preview plugin. It uses macOS Services:
 2. You click the Quick Action `Take Notes`.
 3. macOS runs a workflow at `~/Library/Services/Take Notes.workflow`.
 4. The workflow runs a shell script.
-5. The script opens a note dialog, sends content to Flomo, and can optionally open an X draft.
+5. The script opens a note dialog, sends content to the configured provider, and can optionally open an X draft.
 
 Key files:
 
 - `mac/scripts/install-quick-action.sh`: installs and refreshes the workflow.
-- `mac/scripts/take-notes-service.sh`: runtime behavior (UI + Flomo API call + optional X draft).
-- `mac/scripts/configure-flomo-webhook.sh`: saves webhook config.
-- `~/Library/Application Support/ScreenNotesMac/config.json`: saved Flomo webhook.
+- `mac/scripts/take-notes-service.sh`: runtime behavior (UI + provider API call + optional X draft).
+- `mac/scripts/configure-flomo-webhook.sh`: saves Flomo config.
+- `mac/scripts/configure-getbiji.sh`: saves Get笔记 config.
+- `~/Library/Application Support/ScreenNotesMac/config.json`: saved provider config.
 - `~/Library/Application Support/ScreenNotesMac/skills/baoyu-post-to-x`: bundled X skill runtime.
 - `~/Library/Application Support/ScreenNotesMac/x-profile`: dedicated Chrome profile for X drafts.
 - `~/Library/Logs/ScreenNotesMac/service.log`: runtime logs.
@@ -34,7 +35,7 @@ When `Take Notes` runs:
 
 1. Read selected text from stdin.
 2. If stdin is empty, fallback to clipboard (`pbpaste`).
-3. Read webhook URL from config JSON.
+3. Read provider selection and credentials from config JSON.
 4. Ask Preview for the front document name when available; otherwise fall back to the current source app name.
 5. Show a multi-line note editor dialog (JXA + AppKit), including an optional `Also post to X` checkbox.
 6. Build final note content:
@@ -43,7 +44,7 @@ When `Take Notes` runs:
    - your note
    - source document name or source app name
    - tag `#Mac-Reading`
-7. POST JSON to Flomo webhook.
+7. POST provider-specific JSON to Flomo or Get笔记.
 8. If selected, open an X compose draft in Chrome with the note text prefilled.
 9. Write logs + post a success banner; use in-app dialogs for failures or setup issues.
 
@@ -88,7 +89,7 @@ tail -n 120 "$HOME/Library/Logs/ScreenNotesMac/service.log"
 automator -i "test text" "$HOME/Library/Services/Take Notes.workflow"
 ```
 
-For a non-interactive validation of the runtime script that still exercises the dialog construction path without posting to Flomo:
+For a non-interactive validation of the runtime script that still exercises the dialog construction path without posting to a provider:
 
 ```bash
 SCREEN_NOTES_TEST_MODE=smoke "$HOME/Library/Application Support/ScreenNotesMac/take-notes-service.sh" <<< "test text"
