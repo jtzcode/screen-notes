@@ -175,21 +175,6 @@ build_note_content() {
     "#Mac-Reading"
 }
 
-build_note_title() {
-  local candidate
-  local normalized
-
-  for candidate in "$1" "$2" "$3"; do
-    normalized="$(printf '%s' "$candidate" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')"
-    if [[ -n "${normalized//[[:space:]]/}" ]]; then
-      printf '%s' "$normalized" | cut -c1-80
-      return 0
-    fi
-  done
-
-  printf 'Mac Note'
-}
-
 provider_name_for_id() {
   case "$1" in
     flomo)
@@ -839,9 +824,13 @@ else
 fi
 
 PREVIEW_TEXT="$(printf "%s" "$SELECTED_TEXT" | head -c 500)"
-SOURCE_NAME="$(get_preview_doc_name)"
+FRONT_APP_NAME="$(get_front_app_name)"
+SOURCE_NAME=""
+if [[ "$FRONT_APP_NAME" == "Preview" ]]; then
+  SOURCE_NAME="$(get_preview_doc_name)"
+fi
 if [[ -z "${SOURCE_NAME//[[:space:]]/}" ]]; then
-  SOURCE_NAME="$(get_front_app_name)"
+  SOURCE_NAME="$FRONT_APP_NAME"
 fi
 if [[ -z "${SOURCE_NAME//[[:space:]]/}" ]]; then
   SOURCE_NAME="Selected Text"
@@ -892,10 +881,9 @@ if [[ "$TEST_MODE" != "smoke" ]]; then
 fi
 
 CONTENT="$(build_note_content "$SELECTED_TEXT" "$NOTE_TEXT" "$SOURCE_NAME")"
-TITLE="$(build_note_title "$SOURCE_NAME" "$NOTE_TEXT" "$SELECTED_TEXT")"
 
 RESP_FILE="$(mktemp "${TMPDIR:-/tmp}/screen-notes-response.XXXXXX.txt")"
-HTTP_CODE="$(send_note_to_provider "$CONTENT" "$TITLE" "$RESP_FILE")"
+HTTP_CODE="$(send_note_to_provider "$CONTENT" "" "$RESP_FILE")"
 
 if [[ ! "$HTTP_CODE" =~ ^2[0-9][0-9]$ ]]; then
   log_line "$PROVIDER_NAME request failed. HTTP=$HTTP_CODE Body=$(cat "$RESP_FILE")"

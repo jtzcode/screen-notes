@@ -162,7 +162,7 @@ If you prefer manual setup:
 
 When Get笔记 is configured, the mac tool also sends:
 
-- a generated title based on the source name, note text, or selected text
+- an empty title; the source stays in the note content
 - optional tags from `configure-getbiji.sh`
 
 ## X draft format
